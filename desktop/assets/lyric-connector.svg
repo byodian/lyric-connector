@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="night" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#302855"/>
+      <stop offset="1" stop-color="#12152d"/>
+    </linearGradient>
+    <linearGradient id="lyric" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffc5db"/>
+      <stop offset="1" stop-color="#a4ddff"/>
+    </linearGradient>
+  </defs>
+  <rect x="9" y="9" width="238" height="238" rx="58" fill="url(#night)" stroke="#8267b7" stroke-width="2"/>
+  <path d="M80 59v77c-10-9-25-5-29 7-4 14 12 21 24 14 6-4 11-10 11-18V86l25-5v38c-11-8-26-1-27 11-1 13 15 18 25 11 7-5 8-11 8-18V63z" fill="#ffbed6"/>
+  <rect x="132" y="77" width="78" height="11" rx="5.5" fill="url(#lyric)"/>
+  <rect x="132" y="113" width="61" height="8" rx="4" fill="#ded1f2" fill-opacity=".90"/>
+  <rect x="132" y="145" width="70" height="8" rx="4" fill="#beccEA" fill-opacity=".82"/>
+  <rect x="132" y="177" width="47" height="8" rx="4" fill="#a9b7da" fill-opacity=".69"/>
+  <path d="M211 82h10m-27 35h28m-19 32h17" fill="none" stroke="#8ed2f3" stroke-width="3" stroke-linecap="round"/>
+  <g fill="#88ddf6">
+    <circle cx="222" cy="82" r="4.8"/><circle cx="224" cy="117" r="4.8"/><circle cx="222" cy="149" r="4.8"/>
+  </g>
+</svg>

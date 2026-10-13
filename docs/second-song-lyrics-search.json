@@ -1,0 +1,140 @@
+{
+  "provider": "LRCLIB",
+  "query": {
+    "track_name": "夜的第七章",
+    "artist_name": "Jay Chou"
+  },
+  "httpStatus": 200,
+  "candidates": [
+    {
+      "id": 36384064,
+      "trackName": "夜的第七章",
+      "artistName": "Jay Chou",
+      "albumName": "null",
+      "duration": 229.0,
+      "durationDifferenceSeconds": 0.179,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 16979,
+      "trackName": "夜的第七章",
+      "artistName": "Jay Chou",
+      "albumName": "依然范特西",
+      "duration": 229.0,
+      "durationDifferenceSeconds": 0.179,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 27595932,
+      "trackName": "夜的第七章",
+      "artistName": "Jay Chou",
+      "albumName": "依然范特西 -",
+      "duration": 228.0,
+      "durationDifferenceSeconds": 0.821,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 9885896,
+      "trackName": "夜的第七章",
+      "artistName": "Jay Chou",
+      "albumName": "依然范特西",
+      "duration": 226.0,
+      "durationDifferenceSeconds": 2.821,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 18043538,
+      "trackName": "夜的第七章",
+      "artistName": "Jay Chou 周杰倫",
+      "albumName": "依然范特西",
+      "duration": 228.64,
+      "durationDifferenceSeconds": 0.181,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 9187995,
+      "trackName": "夜的第七章",
+      "artistName": "Jay Chou & 潘兒",
+      "albumName": "依然范特西",
+      "duration": 227.0,
+      "durationDifferenceSeconds": 1.821,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 10662655,
+      "trackName": "夜的第七章",
+      "artistName": "Jay Chou & 潘兒",
+      "albumName": "依然范特西",
+      "duration": 230.0,
+      "durationDifferenceSeconds": 1.179,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 13254323,
+      "trackName": "夜的第七章",
+      "artistName": "周杰伦 - Jay Chou",
+      "albumName": "依然范特西",
+      "duration": 228.672,
+      "durationDifferenceSeconds": 0.149,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 38455611,
+      "trackName": "夜的第七章",
+      "artistName": "Jay Chou - Topic",
+      "albumName": "夜的第七章",
+      "duration": 229.0,
+      "durationDifferenceSeconds": 0.179,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 24735358,
+      "trackName": "周杰伦-夜的第七章(伴奏)",
+      "artistName": "Jay Chou",
+      "albumName": "依然范特西",
+      "duration": 227.810975,
+      "durationDifferenceSeconds": 1.01,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 8334426,
+      "trackName": "夜的第七章 (feat. 潘兒)",
+      "artistName": "Jay Chou",
+      "albumName": "依然范特西",
+      "duration": 229.0,
+      "durationDifferenceSeconds": 0.179,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 28672665,
+      "trackName": "Jay Chou - 夜的第七章",
+      "artistName": "Jay Chou",
+      "albumName": "Jay Chou",
+      "duration": 230.0,
+      "durationDifferenceSeconds": 1.179,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    },
+    {
+      "id": 16046754,
+      "trackName": "夜的第七章 [feat. Penny (潘兒)]",
+      "artistName": "Jay Chou (周杰倫)",
+      "albumName": "Still Fantasy (依然范特西)",
+      "duration": 228.626667,
+      "durationDifferenceSeconds": 0.194,
+      "hasSyncedLyrics": true,
+      "timedLineCount": 43
+    }
+  ]
+}

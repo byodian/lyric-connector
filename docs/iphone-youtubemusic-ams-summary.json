@@ -1,0 +1,14 @@
+{
+  "player": "YouTube Music",
+  "title": "羁绊",
+  "artist": "许嵩",
+  "durationSeconds": 247.881,
+  "initialPositionSeconds": 94.346,
+  "finalPositionSeconds": 141.446,
+  "monotonicDeltaSeconds": 47.159366,
+  "positionDeltaSeconds": 47.1,
+  "clockComparisonResidualSeconds": -0.059366,
+  "notificationCount": 1,
+  "controlChangesObserved": false,
+  "audioAlignmentVerified": false
+}

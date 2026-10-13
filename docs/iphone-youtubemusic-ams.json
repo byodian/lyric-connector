@@ -1,0 +1,67 @@
+{
+    "checkedAtUtc":  "2026-10-13T03:38:33.0767017Z",
+    "status":  "ams-events-received",
+    "deviceName":  "iPhone",
+    "selection":  "paired-ble-selector-and-exact-name",
+    "stage":  "notification-capture",
+    "amsServiceUuid":  "89D3502B-0F36-433A-8EF4-C502AD55F8DC",
+    "amsConnectionVerified":  true,
+    "events":  [
+                   {
+                       "receivedAtUtc":  "2026-10-13T03:38:34.2491458Z",
+                       "receivedTimestamp":  20128867042135,
+                       "receivedAfterSeconds":  0.008,
+                       "entityId":  0,
+                       "attributeId":  1,
+                       "truncated":  false,
+                       "value":  "1,1.0,236.325"
+                   }
+               ],
+    "enumeratedPairingState":  false,
+    "connectionBefore":  "Connected",
+    "deviceAccess":  "Allowed",
+    "discoverySeconds":  0.376,
+    "discoveryStatus":  "Success",
+    "protocolError":  null,
+    "connectionAfter":  "Connected",
+    "amsServiceCount":  1,
+    "sharingModeBefore":  "Unspecified",
+    "openStatus":  "Success",
+    "characteristicsStatus":  "Success",
+    "characteristicsProtocolError":  null,
+    "characteristics":  [
+                            {
+                                "uuid":  "9b3c81d8-57b1-4a8a-b8df-0e56f7ca51c2",
+                                "properties":  "Write, Notify, ExtendedProperties, ReliableWrites"
+                            },
+                            {
+                                "uuid":  "2f7cabce-808d-411f-9a0c-bb92ba96c102",
+                                "properties":  "Write, Notify, ExtendedProperties, ReliableWrites"
+                            },
+                            {
+                                "uuid":  "c6b2f38c-23ab-46d8-a6ab-a3a870bbd5d7",
+                                "properties":  "Read, Write, ExtendedProperties, ReliableWrites"
+                            }
+                        ],
+    "notifyStatus":  "Success",
+    "registrations":  [
+                          {
+                              "entityId":  0,
+                              "status":  "Success",
+                              "protocolError":  null
+                          },
+                          {
+                              "entityId":  1,
+                              "status":  "Success",
+                              "protocolError":  null
+                          },
+                          {
+                              "entityId":  2,
+                              "status":  "Success",
+                              "protocolError":  null
+                          }
+                      ],
+    "listenSeconds":  20,
+    "eventCount":  1,
+    "connectionAtEnd":  "Connected"
+}

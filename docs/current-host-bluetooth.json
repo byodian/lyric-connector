@@ -1,0 +1,14 @@
+{
+    "checkedAtUtc":  "2026-10-13T05:22:32.5317598Z",
+    "status":  "capabilities-read",
+    "host":  "native-windows",
+    "lowEnergySupported":  true,
+    "centralRoleSupported":  true,
+    "peripheralRoleSupported":  true,
+    "radioState":  "On",
+    "pairedBleDeviceCount":  1,
+    "pairedBleDeviceNames":  [
+                                 "iPhone"
+                             ],
+    "amsConnectionVerified":  false
+}

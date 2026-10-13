@@ -1,0 +1,149 @@
+{
+    "checkedAtUtc":  "2026-10-13T05:30:22.9771170Z",
+    "status":  "ams-events-received",
+    "deviceName":  "iPhone",
+    "selection":  "paired-ble-selector-and-exact-name",
+    "stage":  "notification-capture",
+    "amsServiceUuid":  "89D3502B-0F36-433A-8EF4-C502AD55F8DC",
+    "amsConnectionVerified":  true,
+    "events":  [
+                   {
+                       "receivedAtUtc":  "2026-10-13T05:30:24.3647258Z",
+                       "receivedTimestamp":  20195968620898,
+                       "receivedAfterSeconds":  0.016,
+                       "entityId":  0,
+                       "attributeId":  1,
+                       "truncated":  false,
+                       "value":  "1,1.0,60.340"
+                   }
+               ],
+    "enumeratedPairingState":  false,
+    "connectionBefore":  "Connected",
+    "deviceAccess":  "Allowed",
+    "discoverySeconds":  0.469,
+    "discoveryStatus":  "Success",
+    "protocolError":  null,
+    "connectionAfter":  "Connected",
+    "amsServiceCount":  1,
+    "sharingModeBefore":  "Unspecified",
+    "openStatus":  "Success",
+    "sharingModeAfter":  "SharedReadAndWrite",
+    "characteristicsStatus":  "Success",
+    "characteristicsProtocolError":  null,
+    "characteristics":  [
+                            {
+                                "uuid":  "9b3c81d8-57b1-4a8a-b8df-0e56f7ca51c2",
+                                "properties":  "Write, Notify, ExtendedProperties, ReliableWrites"
+                            },
+                            {
+                                "uuid":  "2f7cabce-808d-411f-9a0c-bb92ba96c102",
+                                "properties":  "Write, Notify, ExtendedProperties, ReliableWrites"
+                            },
+                            {
+                                "uuid":  "c6b2f38c-23ab-46d8-a6ab-a3a870bbd5d7",
+                                "properties":  "Read, Write, ExtendedProperties, ReliableWrites"
+                            }
+                        ],
+    "notifyStatus":  "Success",
+    "registrations":  [
+                          {
+                              "entityId":  0,
+                              "status":  "Success",
+                              "protocolError":  null
+                          },
+                          {
+                              "entityId":  1,
+                              "status":  "Success",
+                              "protocolError":  null
+                          },
+                          {
+                              "entityId":  2,
+                              "status":  "Success",
+                              "protocolError":  null
+                          }
+                      ],
+    "attributes":  [
+                       {
+                           "entityId":  0,
+                           "attributeId":  0,
+                           "writeStatus":  "Success",
+                           "protocolError":  null,
+                           "readStatus":  "Success",
+                           "receivedAtUtc":  "2026-10-13T05:30:25.0279661Z",
+                           "receivedTimestamp":  20195975255975,
+                           "value":  "YouTube Music"
+                       },
+                       {
+                           "entityId":  0,
+                           "attributeId":  1,
+                           "writeStatus":  "Success",
+                           "protocolError":  null,
+                           "readStatus":  "Success",
+                           "receivedAtUtc":  "2026-10-13T05:30:25.3251306Z",
+                           "receivedTimestamp":  20195978218968,
+                           "value":  "1,1.0,61.297"
+                       },
+                       {
+                           "entityId":  1,
+                           "attributeId":  0,
+                           "writeStatus":  "Success",
+                           "protocolError":  162,
+                           "readStatus":  "ProtocolError",
+                           "receivedAtUtc":  "2026-10-13T05:30:25.8070451Z",
+                           "receivedTimestamp":  20195983036410
+                       },
+                       {
+                           "entityId":  2,
+                           "attributeId":  0,
+                           "writeStatus":  "Success",
+                           "protocolError":  null,
+                           "readStatus":  "Success",
+                           "receivedAtUtc":  "2026-10-13T05:30:26.2247632Z",
+                           "receivedTimestamp":  20195987213219,
+                           "value":  "Jay Chou"
+                       },
+                       {
+                           "entityId":  2,
+                           "attributeId":  1,
+                           "writeStatus":  "Success",
+                           "protocolError":  162,
+                           "readStatus":  "ProtocolError",
+                           "receivedAtUtc":  "2026-10-13T05:30:26.5257603Z",
+                           "receivedTimestamp":  20195990230074
+                       },
+                       {
+                           "entityId":  2,
+                           "attributeId":  2,
+                           "writeStatus":  "Success",
+                           "protocolError":  null,
+                           "readStatus":  "Success",
+                           "receivedAtUtc":  "2026-10-13T05:30:26.7653154Z",
+                           "receivedTimestamp":  20195992623193,
+                           "value":  "夜的第七章"
+                       },
+                       {
+                           "entityId":  2,
+                           "attributeId":  3,
+                           "writeStatus":  "Success",
+                           "protocolError":  null,
+                           "readStatus":  "Success",
+                           "receivedAtUtc":  "2026-10-13T05:30:27.1877286Z",
+                           "receivedTimestamp":  20195996848383,
+                           "value":  "228.821"
+                       }
+                   ],
+    "listenSeconds":  60,
+    "timestampFrequency":  10000000,
+    "eventCount":  1,
+    "connectionAtEnd":  "Connected",
+    "finalPlaybackInfo":  {
+                              "entityId":  0,
+                              "attributeId":  1,
+                              "writeStatus":  "Success",
+                              "protocolError":  null,
+                              "readStatus":  "Success",
+                              "receivedAtUtc":  "2026-10-13T05:31:27.5453102Z",
+                              "receivedTimestamp":  20196600421634,
+                              "value":  "1,1.0,123.456"
+                          }
+}

@@ -1,0 +1,11 @@
+{
+  "provider": "LRCLIB",
+  "query": {
+    "track_name": "羁绊",
+    "artist_name": "许嵩",
+    "album_name": "一片冰心在玉壶 电视剧影视原声带",
+    "duration": "247.881"
+  },
+  "httpStatus": 404,
+  "error": "Not Found"
+}

@@ -1,0 +1,9 @@
+{
+  "provider": "LRCLIB",
+  "query": {
+    "track_name": "羁绊",
+    "artist_name": "许嵩"
+  },
+  "httpStatus": 200,
+  "candidates": []
+}

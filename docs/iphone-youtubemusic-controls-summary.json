@@ -1,0 +1,45 @@
+{
+  "basicStateReadVerified": true,
+  "controlEvidenceVerified": true,
+  "player": "YouTube Music",
+  "initialTitle": "說好的幸福呢",
+  "eventCount": 42,
+  "pauseResumeDurationsSeconds": [
+    2.882,
+    1.439,
+    1.74
+  ],
+  "progressDiscontinuitiesSeconds": [
+    45.55,
+    -2.753,
+    -85.339,
+    -2.173
+  ],
+  "titleChanges": [
+    {
+      "from": "說好的幸福呢",
+      "to": "周二珂 - 《走在冷风中》"
+    },
+    {
+      "from": "周二珂 - 《走在冷风中》",
+      "to": "[Meteor Garden OST] Ni Yao De Ai (你要的爱) - Penny Tai Cover in Bohol Island"
+    },
+    {
+      "from": "[Meteor Garden OST] Ni Yao De Ai (你要的爱) - Penny Tai Cover in Bohol Island",
+      "to": "周二珂 - 《走在冷风中》"
+    },
+    {
+      "from": "周二珂 - 《走在冷风中》",
+      "to": "說好的幸福呢"
+    },
+    {
+      "from": "說好的幸福呢",
+      "to": "周二珂 - 《走在冷风中》"
+    },
+    {
+      "from": "周二珂 - 《走在冷风中》",
+      "to": "夜的第七章"
+    }
+  ],
+  "audioAlignmentVerified": false
+}
