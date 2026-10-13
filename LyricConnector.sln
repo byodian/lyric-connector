@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LyricConnector", "desktop\LyricConnector.csproj", "{1D62501B-C0D9-4D38-99EA-9B9CE398B454}"
+EndProject
+Project("{C716FE70-8BC3-4F1E-9F14-4A7F482C84A3}") = "LyricConnector.Package", "installer\msix\LyricConnector.Package.wapproj", "{1AC227AE-B1A3-4F00-92D2-75B1E174C119}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1D62501B-C0D9-4D38-99EA-9B9CE398B454}.Debug|x64.ActiveCfg = Debug|x64
+		{1D62501B-C0D9-4D38-99EA-9B9CE398B454}.Debug|x64.Build.0 = Debug|x64
+		{1D62501B-C0D9-4D38-99EA-9B9CE398B454}.Release|x64.ActiveCfg = Release|x64
+		{1D62501B-C0D9-4D38-99EA-9B9CE398B454}.Release|x64.Build.0 = Release|x64
+		{1AC227AE-B1A3-4F00-92D2-75B1E174C119}.Debug|x64.ActiveCfg = Debug|x64
+		{1AC227AE-B1A3-4F00-92D2-75B1E174C119}.Debug|x64.Build.0 = Debug|x64
+		{1AC227AE-B1A3-4F00-92D2-75B1E174C119}.Release|x64.ActiveCfg = Release|x64
+		{1AC227AE-B1A3-4F00-92D2-75B1E174C119}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal

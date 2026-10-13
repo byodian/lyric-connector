@@ -1,0 +1,46 @@
+name: Windows installer artifact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish desktop application
+        run: dotnet publish .\desktop\LyricConnector.csproj --configuration Release --output .\artifacts\app
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Create setup program
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .\artifacts\installer | Out-Null
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" .\installer\LyricConnector.iss
+
+      - name: Write SHA-256 checksum
+        shell: pwsh
+        run: |
+          Get-FileHash .\artifacts\installer\*.exe -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
+            Set-Content .\artifacts\installer\SHA256SUMS.txt -Encoding ascii
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyric-connector-windows-x64
+          path: .\artifacts\installer\*
+          if-no-files-found: error
+          retention-days: 30

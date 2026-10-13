@@ -41,6 +41,7 @@ namespace LyricConnector
         private bool playPauseShowsPlay = true;
         private byte playPauseCommand;
         public event Action<byte> RemoteCommandRequested;
+        public event Action SettingsRequested;
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
         private static extern IntPtr GetStyle(IntPtr window, int index);
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
@@ -80,9 +81,9 @@ namespace LyricConnector
             controls.Children.Add(playPause);
             controls.Children.Add(nextTrack);
             progressFill = new Border { Height = 2, HorizontalAlignment = HorizontalAlignment.Left,
-                Background = new SolidColorBrush(Color.FromArgb(210, 170, 154, 197)), CornerRadius = new CornerRadius(1), IsHitTestVisible = false };
+                Background = new SolidColorBrush(Color.FromRgb(132, 86, 186)), CornerRadius = new CornerRadius(1), IsHitTestVisible = false };
             progressTrack = new Border { Width = 220, Height = 2, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 4),
-                Background = new SolidColorBrush(Color.FromArgb(58, 255, 255, 255)), CornerRadius = new CornerRadius(1),
+                Background = new SolidColorBrush(Color.FromArgb(128, 150, 146, 160)), CornerRadius = new CornerRadius(1),
                 Child = progressFill, IsHitTestVisible = false };
             progressTrack.SizeChanged += delegate { UpdateProgressFill(); };
             controlsHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
@@ -102,9 +103,18 @@ namespace LyricConnector
             Content = surface;
             surface.MouseEnter += delegate { controlsHideTimer.Stop(); SetControlsVisible(true); };
             surface.MouseLeave += delegate { controlsHideTimer.Stop(); controlsHideTimer.Start(); };
+            surface.MouseLeftButtonDown += delegate(object sender, System.Windows.Input.MouseButtonEventArgs args)
+            {
+                if (args.ClickCount != 2) return;
+                var handler = SettingsRequested;
+                if (handler != null) handler();
+                args.Handled = true;
+            };
             Closed += delegate { controlsHideTimer.Stop(); };
-            current.MouseLeftButtonDown += delegate { if (!through) DragMove(); };
-            next.MouseLeftButtonDown += delegate { if (!through) DragMove(); };
+            current.MouseLeftButtonDown += delegate(object sender, System.Windows.Input.MouseButtonEventArgs args)
+            { if (!through && args.ClickCount == 1) DragMove(); };
+            next.MouseLeftButtonDown += delegate(object sender, System.Windows.Input.MouseButtonEventArgs args)
+            { if (!through && args.ClickCount == 1) DragMove(); };
             SourceInitialized += delegate { Apply(settings); };
             SetPlaybackControls(false, false, RemoteCommand.TogglePlayPause, false, false);
             SetText("等待 iPhone 的播放状态", "桌面控制窗口负责歌词与显示设置");
@@ -275,7 +285,13 @@ namespace LyricConnector
         private Lyrics lyrics;
         private LyricRecord selected;
         private bool closing;
+        private bool initialized;
+        private bool cleanupStarted;
+        private bool cleanupComplete;
         private bool hotkey;
+        private readonly System.Drawing.Icon trayImage;
+        private readonly System.Windows.Forms.ContextMenuStrip trayMenu;
+        private readonly System.Windows.Forms.NotifyIcon trayIcon;
         private readonly string requestedDevice;
         public bool HadSnapshot { get; private set; }
         public bool HasTimedLyrics { get { return lyrics != null && lyrics.Synced; } }
@@ -303,6 +319,7 @@ namespace LyricConnector
             overlay = new LyricWindow(settings);
             overlay.SetLyricsVisible(settings.ShowLyrics != false);
             overlay.RemoteCommandRequested += SendRemoteCommand;
+            overlay.SettingsRequested += ShowControlWindow;
             lyricsVisibility = Button(settings.ShowLyrics == false ? "显示歌词" : "隐藏歌词", delegate
             {
                 settings.ShowLyrics = settings.ShowLyrics == false;
@@ -311,6 +328,22 @@ namespace LyricConnector
             lyricsVisibility.ToolTip = "切换悬浮歌词文字显示";
             Title = "Lyric Connector · 桌面控制";
             Icon = BitmapFrame.Create(new Uri(iconPath, UriKind.Absolute));
+            trayImage = new System.Drawing.Icon(iconPath);
+            trayMenu = new System.Windows.Forms.ContextMenuStrip();
+            trayMenu.Items.Add("打开桌面控制").Click += delegate { ShowControlWindow(); };
+            trayMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+            trayMenu.Items.Add("退出 Lyric Connector").Click += delegate { ExitApplication(); };
+            trayIcon = new System.Windows.Forms.NotifyIcon
+            {
+                Icon = trayImage,
+                Text = "Lyric Connector · 点击打开桌面控制",
+                ContextMenuStrip = trayMenu,
+                Visible = true
+            };
+            trayIcon.MouseClick += delegate(object sender, System.Windows.Forms.MouseEventArgs args)
+            {
+                if (args.Button == System.Windows.Forms.MouseButtons.Left) ShowControlWindow();
+            };
             Width = 520;
             Height = 810;
             MinWidth = 440;
@@ -370,7 +403,7 @@ namespace LyricConnector
             root.Children.Add(Row(new TextBlock { Text = "歌词提前", VerticalAlignment = VerticalAlignment.Center },
                 Button("− 0.25s", delegate { settings.Offset -= 0.25; UpdateOffset(); }), offsetLabel,
                 Button("+ 0.25s", delegate { settings.Offset += 0.25; UpdateOffset(); }), Button("归零", delegate { settings.Offset = 0; UpdateOffset(); })));
-            root.Children.Add(new TextBlock { Text = "正值让歌词提前。未穿透时可拖动歌词窗口，右下角可调整大小。关闭此窗口会退出。", TextWrapping = TextWrapping.Wrap,
+            root.Children.Add(new TextBlock { Text = "正值让歌词提前。未穿透时可拖动歌词窗口，右下角可调整大小。关闭控制窗口会隐藏到系统托盘，点击托盘图标可重新打开；右键托盘图标可退出程序。", TextWrapping = TextWrapping.Wrap,
                 Foreground = new SolidColorBrush(Color.FromRgb(112, 100, 128)), Margin = new Thickness(0, 7, 0, 0), FontSize = 11 });
             Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             UpdateOffset();
@@ -383,25 +416,60 @@ namespace LyricConnector
                 hotkey = RegisterHotKey(handle, 1, 0x4003, 0x4C);
                 if (!hotkey) Console.WriteLine("HOTKEY: Ctrl+Alt+L unavailable; use control window to unlock.");
             };
-            Loaded += async delegate { overlay.Show(); ticker.Start(); await RefreshDevicesAsync(true); };
+            Loaded += async delegate
+            {
+                if (initialized) return;
+                initialized = true;
+                overlay.Show();
+                ticker.Start();
+                await RefreshDevicesAsync(true);
+            };
             Closing += async delegate(object sender, System.ComponentModel.CancelEventArgs args)
             {
-                if (closing) return;
+                if (!closing)
+                {
+                    args.Cancel = true;
+                    Hide();
+                    return;
+                }
+                if (cleanupComplete) return;
                 args.Cancel = true;
-                closing = true;
+                if (cleanupStarted) return;
+                cleanupStarted = true;
                 ticker.Stop();
                 connectionGeneration++;
                 if (queryCancellation != null) queryCancellation.Cancel();
                 if (sourceCancellation != null) sourceCancellation.Cancel();
-                await sourceTask;
+                try { await sourceTask; }
+                catch (Exception error) { Console.WriteLine("SOURCE_STOP: " + error.Message); }
                 settings.Left = overlay.Left; settings.Top = overlay.Top; settings.Width = overlay.Width;
                 try { File.WriteAllText(settingsPath, new JavaScriptSerializer().Serialize(settings)); }
                 catch (Exception error) { Console.WriteLine("SETTINGS: " + error.Message); }
                 if (hotkey) UnregisterHotKey(new WindowInteropHelper(this).Handle, 1);
+                trayIcon.Visible = false;
+                trayIcon.Dispose();
+                trayMenu.Dispose();
+                trayImage.Dispose();
                 overlay.Close();
                 store.Dispose();
+                cleanupComplete = true;
                 Dispatcher.BeginInvoke(new Action(Close));
             };
+        }
+
+        private void ShowControlWindow()
+        {
+            if (closing) return;
+            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            if (!IsVisible) Show();
+            Activate();
+        }
+
+        internal void ExitApplication()
+        {
+            if (closing) return;
+            closing = true;
+            Close();
         }
 
         private static TextBlock Label(string text) { return new TextBlock { Text = text, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 9, 0, 7) }; }
@@ -646,8 +714,11 @@ namespace LyricConnector
             if (lyrics == null) { overlay.SetText(title, "等待歌词 · 请在桌面选择候选或导入 LRC"); return; }
             if (!lyrics.Synced) { overlay.SetText(title, "此歌词为纯文本 · 可在桌面查看全文"); return; }
             var index = lyrics.IndexAt(position, settings.Offset);
-            overlay.SetText(index < 0 ? title : lyrics.Lines[index].Text,
-                index + 1 < lyrics.Lines.Count ? lyrics.Lines[index + 1].Text : "");
+            var currentLine = index < 0 ? title : lyrics.Lines[index].Text;
+            var nextLine = index + 1 < lyrics.Lines.Count ? lyrics.Lines[index + 1].Text : "";
+            if ((model.Track.Duration > 0 && position >= model.Track.Duration) || String.IsNullOrWhiteSpace(currentLine))
+                currentLine = title;
+            overlay.SetText(currentLine, nextLine);
         }
 
         private void UpdatePlaybackControls()
@@ -712,7 +783,7 @@ namespace LyricConnector
             if (smokeSeconds > 0)
             {
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(smokeSeconds) };
-                timer.Tick += delegate { timer.Stop(); window.Capture(screenshot); window.Close(); };
+                timer.Tick += delegate { timer.Stop(); window.Capture(screenshot); window.ExitApplication(); };
                 timer.Start();
             }
             application.Run(window);

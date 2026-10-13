@@ -67,9 +67,9 @@ Windows 端点名称曾从 `iPhone 17` 显示为 `iPhone`，配对选择器返�
 
 ## 歌词源的独立检查
 
-对上述《羁绊》样本，LRCLIB 精确查询返回 404，按歌名与艺人搜索返回空列表。证据见 [精确查询](single-song-lyrics-check.json)、[候选搜索](single-song-lyrics-search.json)。
+对上述《羁绊》样本，[LRCLIB](https://lrclib.net) 精确查询返回 404，按歌名与艺人搜索返回空列表。证据见 [精确查询](single-song-lyrics-check.json)、[候选搜索](single-song-lyrics-search.json)。
 
-因此当前已证明播放状态接入可用，但 **LRCLIB 未覆盖这首样本歌曲**。桌面歌词实现需要本地 LRC 或另一个明确选定的歌词源；不自动匹配同名的其他艺人，也不伪造时间轴。这一首样本不能推导 LRCLIB 的整体中文覆盖率。
+因此当前已证明播放状态接入可用，但 **LRCLIB 未覆盖这首样本歌曲**。桌面歌词实现需要本地 LRC 或另一个明确选定的歌词源；不自动匹配同名的其他艺人，也不伪造时间轴。这一首样本不能推导 [LRCLIB](https://lrclib.net) 的整体中文覆盖率。
 
 第二首样本《夜的第七章》 / Jay Chou 则返回多个带时间戳的候选，其中有时长 229 秒、43 个时间行的版本，与手机 228.821 秒相差约 0.179 秒。证据见 [第二首候选查询](second-song-lyrics-search.json)。候选也包含伴奏和不同专辑标记，尚未自动选定，也未核验与实际音频的版本和时间轴一致性。
 

@@ -32,7 +32,7 @@ def main() -> int:
     directory = Path(__file__).resolve().parent
     imports = set()
     units = []
-    for filename in ("Core.cs", "SongQuery.cs", "Source.cs", "LyricsStore.cs", "Windows.cs", "SongGlyph.cs", "Tests.cs"):
+    for filename in ("Core.cs", "SongQuery.cs", "Source.cs", "LyricsStore.cs", "Windows.cs", "Program.cs", "SongGlyph.cs", "Tests.cs"):
         source = (directory / filename).read_text(encoding="utf-8")
         imports.update(re.findall(r"^using [\w.]+;\s*$", source, re.MULTILINE))
         units.append(re.sub(r"^using [\w.]+;\s*$", "", source, flags=re.MULTILINE))
@@ -51,7 +51,7 @@ foreach ($name in @('Windows.Foundation', 'Windows.Devices', 'Windows.Storage'))
 foreach ($name in @('System.dll', 'System.Core.dll', 'System.Runtime.WindowsRuntime.dll')) {
     $parameters.ReferencedAssemblies.Add((Join-Path $runtime $name)) | Out-Null
 }
-foreach ($name in @('System.Runtime', 'System.Net.Http', 'System.Web.Extensions', 'WindowsBase', 'PresentationCore', 'PresentationFramework', 'System.Xaml')) {
+foreach ($name in @('System.Runtime', 'System.Net.Http', 'System.Web.Extensions', 'System.Windows.Forms', 'System.Drawing', 'WindowsBase', 'PresentationCore', 'PresentationFramework', 'System.Xaml')) {
     $assembly = [Reflection.Assembly]::LoadWithPartialName($name)
     if ($null -eq $assembly) { throw ('Missing Windows component: ' + $name) }
     $parameters.ReferencedAssemblies.Add($assembly.Location) | Out-Null
