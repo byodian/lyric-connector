@@ -35,11 +35,11 @@ namespace LyricConnector
                     var video = new Track { Title = "止戰之殤 | KTV 動態字幕 | 全新 輕搖滾 Cover | AI Voice Cover by Capt. Lilia Iwasko | 原唱：周杰倫",
                         Artist = "Capt. Lilia Iwasko", Album = "", Duration = 219 };
                     var result = store.FindAsync(video, CancellationToken.None).GetAwaiter().GetResult();
-                    Check(result.Candidates.Count > 0 && result.Selected == null, "mixed video title finds candidates without selecting an unverified cover version");
+                    Check(result.Candidates.Count > 0 && result.Selected == null, "mixed video title finds ranked candidates without treating an unverified cover as exact");
                     Console.WriteLine("INFERRED_PROVIDER: title=" + SongQuery.Infer(video).Title + " candidates=" + result.Candidates.Count);
                     var translatedTitle = new Track { Title = "Definitely Not a LRCLIB Title", Artist = "Jay Chou", Album = "十一月的萧邦", Duration = 0 };
                     var expanded = store.FindAsync(translatedTitle, CancellationToken.None).GetAwaiter().GetResult();
-                    Check(expanded.ExpandedSearch && expanded.Candidates.Any(record => record.Document().Synced),
+                    Check(expanded.ExpandedSearch && expanded.Candidates.Any(match => match.Record.Document().Synced),
                         "unmatched title expands to album or artist candidates without auto-selection");
                     Console.WriteLine("EXPANDED_PROVIDER: candidates=" + expanded.Candidates.Count);
                 }
@@ -96,6 +96,25 @@ namespace LyricConnector
             Check(lines.IndexAt(99, 0) == 2 && lines.IndexAt(0, 0) == -1, "lyric boundary lookup");
             Check(!Lyrics.Parse("plain words").Synced, "plain lyrics have no fabricated timeline");
             Check(new LyricRecord { syncedLyrics = "", plainLyrics = "plain words" }.Document().PlainText == "plain words", "empty timed lyrics retain provider plain text");
+            var matchTrack = new Track { Title = "夜的第七章", Artist = "Jay Chou", Album = "十一月的萧邦", Duration = 218 };
+            var correctPlain = new LyricRecord { trackName = "夜的第七章", artistName = "Jay Chou", albumName = "十一月的萧邦", duration = 218, plainLyrics = "正确歌词" };
+            var wrongSynced = new LyricRecord { trackName = "夜的第七章", artistName = "Other Artist", albumName = "Other Album", duration = 250, syncedLyrics = "[00:01]错版歌词" };
+            var ranked = LyricMatcher.Rank(matchTrack, matchTrack.Title, matchTrack.Artist, new[] { wrongSynced, correctPlain });
+            Check(ranked[0].Record == correctPlain && ranked[0].Score > ranked[1].Score,
+                "candidate ranking prefers matching song identity over an unrelated synced version");
+            var titleVariant = new LyricRecord { trackName = "Love Story", artistName = "Taylor Swift", albumName = "Fearless", duration = 235, syncedLyrics = "[00:01]lyrics" };
+            var variantTrack = new Track { Title = "Love Story (Lyric Video)", Artist = "Taylor Swift", Album = "Fearless", Duration = 235 };
+            Check(LyricMatcher.Rank(variantTrack, variantTrack.Title, variantTrack.Artist, new[] { titleVariant })[0].Score == 100,
+                "candidate score ignores punctuation and generic video labels");
+            var durationlessTrack = new Track { Title = "夜的第七章", Artist = "Jay Chou", Album = "", Duration = 0 };
+            var durationlessMatch = new LyricRecord { trackName = "夜的第七章", artistName = "Jay Chou", duration = null, syncedLyrics = "[00:01]lyrics" };
+            Check(LyricMatcher.Rank(durationlessTrack, durationlessTrack.Title, durationlessTrack.Artist, new[] { durationlessMatch })[0].Score == 100,
+                "missing playback and candidate duration do not lower a metadata match");
+            var sparseTrack = new Track { Title = "夜的第七章", Artist = "Jay Chou", Album = "十一月的萧邦", Duration = 218 };
+            var sparseCandidate = new LyricRecord { trackName = "夜的第七章", syncedLyrics = "[00:01]歌词" };
+            var sparseMatch = LyricMatcher.Rank(sparseTrack, sparseTrack.Title, sparseTrack.Artist, new[] { sparseCandidate })[0];
+            Check(sparseMatch.Score == 100 && sparseMatch.ConfidenceScore < 80,
+                "missing candidate metadata keeps title similarity but lowers confidence");
             var defaults = DesktopSettings.Defaults();
             var currentColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(defaults.CurrentLineColor);
             var nextColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(defaults.NextLineColor);

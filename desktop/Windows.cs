@@ -302,6 +302,7 @@ namespace LyricConnector
         private readonly LyricsStore store;
         private readonly LyricWindow overlay;
         private readonly DispatcherTimer ticker;
+        private readonly DispatcherTimer reconnectTimer;
         private readonly ComboBox devices = new ComboBox { MinWidth = 210 };
         private readonly TextBlock sourceStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
         private readonly TextBlock trackTitle = new TextBlock { FontSize = 23, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
@@ -316,6 +317,7 @@ namespace LyricConnector
         private readonly TextBlock offsetLabel = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 76, TextAlignment = TextAlignment.Center };
         private CancellationTokenSource sourceCancellation;
         private Task sourceTask = Task.FromResult(0);
+        private bool reconnectAttemptInProgress;
         private AmsSource activeSource;
         private CancellationTokenSource queryCancellation;
         private long connectionGeneration;
@@ -450,6 +452,8 @@ namespace LyricConnector
             UpdateOffset();
             ticker = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             ticker.Tick += delegate { Render(); };
+            reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            reconnectTimer.Tick += async delegate { await TryAutoReconnectAsync(); };
             SourceInitialized += delegate
             {
                 var handle = new WindowInteropHelper(this).Handle;
@@ -478,6 +482,7 @@ namespace LyricConnector
                 if (cleanupStarted) return;
                 cleanupStarted = true;
                 ticker.Stop();
+                reconnectTimer.Stop();
                 connectionGeneration++;
                 if (queryCancellation != null) queryCancellation.Cancel();
                 if (sourceCancellation != null) sourceCancellation.Cancel();
@@ -611,15 +616,63 @@ namespace LyricConnector
                 if (target == null && requestedDevice.Length > 0) target = found.SingleOrDefault(item => item.Name == requestedDevice);
                 devices.SelectedItem = target;
                 sourceStatus.Text = found.Count == 0 ? "未发现已配对的蓝牙 LE 设备，请先在 Windows 中连接 iPhone。" : "选择你的 iPhone 后连接。";
-                if (autoConnect && target != null) await ConnectAsync();
+                if (autoConnect)
+                {
+                    if (target != null) await ConnectAsync();
+                    else StartAutoReconnect();
+                }
             }
-            catch (Exception error) { sourceStatus.Text = "设备读取失败：" + error.Message; }
+            catch (Exception error)
+            {
+                sourceStatus.Text = "设备读取失败：" + error.Message;
+                if (autoConnect) StartAutoReconnect();
+            }
+        }
+
+        private void StartAutoReconnect()
+        {
+            if (closing || (String.IsNullOrEmpty(settings.DeviceId) && requestedDevice.Length == 0)) return;
+            sourceStatus.Text = "等待 iPhone 蓝牙可用，将自动重连。";
+            if (!reconnectTimer.IsEnabled) reconnectTimer.Start();
+        }
+
+        private async Task TryAutoReconnectAsync()
+        {
+            if (closing || activeSource != null || reconnectAttemptInProgress) return;
+            reconnectAttemptInProgress = true;
+            var generation = connectionGeneration;
+            try
+            {
+                var found = await AmsSource.DevicesAsync(CancellationToken.None);
+                if (closing || activeSource != null || generation != connectionGeneration) return;
+                var target = found.FirstOrDefault(item => item.Id == settings.DeviceId);
+                if (target == null && requestedDevice.Length > 0) target = found.SingleOrDefault(item => item.Name == requestedDevice);
+                if (target == null)
+                {
+                    sourceStatus.Text = "等待 iPhone 蓝牙可用，将继续自动重连。";
+                    return;
+                }
+                devices.ItemsSource = found;
+                devices.SelectedItem = target;
+                sourceStatus.Text = "已检测到 iPhone，正在自动重连…";
+                await ConnectAsync();
+            }
+            catch (Exception error)
+            {
+                if (!closing && generation == connectionGeneration)
+                {
+                    Console.WriteLine("AMS_RECONNECT_ERROR: " + error.Message);
+                    sourceStatus.Text = "iPhone 自动重连暂时失败，正在重试。";
+                }
+            }
+            finally { reconnectAttemptInProgress = false; }
         }
 
         private async Task ConnectAsync()
         {
             var device = devices.SelectedItem as DeviceChoice;
             if (device == null) { sourceStatus.Text = "请先选择你的 iPhone。"; return; }
+            reconnectTimer.Stop();
             var generation = ++connectionGeneration;
             activeSource = null;
             UpdatePlaybackControls();
@@ -643,6 +696,8 @@ namespace LyricConnector
             if (update.Kind == UpdateKind.Disconnected) activeSource = null;
             var changed = model.Accept(update);
             sourceStatus.Text = model.Status + (model.Player.Length > 0 ? " · " + model.Player : "");
+            if (update.Kind == UpdateKind.Disconnected) StartAutoReconnect();
+            else if (update.Kind == UpdateKind.Snapshot) reconnectTimer.Stop();
             Console.WriteLine("AMS: " + update.Kind + " r" + update.Revision + " " + model.Status);
             if (changed || update.Kind == UpdateKind.Transition || update.Kind == UpdateKind.Disconnected)
             {
@@ -685,7 +740,8 @@ namespace LyricConnector
             try
             {
                 var result = manual
-                    ? new LyricResult { Candidates = await store.SearchAsync(searchTitle.Text.Trim(), searchArtist.Text.Trim(), token) }
+                    ? new LyricResult { Candidates = LyricMatcher.Rank(track, searchTitle.Text.Trim(), searchArtist.Text.Trim(),
+                        await store.SearchAsync(searchTitle.Text.Trim(), searchArtist.Text.Trim(), token)) }
                     : await store.FindAsync(track, token);
                 if (token.IsCancellationRequested || closing || revision != model.Revision) return;
                 if (result.Selected != null) SetLyrics(result.Selected);
@@ -696,7 +752,21 @@ namespace LyricConnector
                     var query = SongQuery.Infer(track);
                     var inference = !manual && query.Inferred ? "已提取歌名《" + query.Title + "》。" : "";
                     var expanded = !manual && result.ExpandedSearch ? "曲名直接匹配未命中，已扩大到专辑 / 歌手候选。" : "";
-                    lyricStatus.Text = inference + expanded + (result.Candidates.Count == 0 ? "未找到歌词。可修正标题 / 歌手，或导入本地 LRC。" : "找到 " + result.Candidates.Count + " 个候选，请核对版本后选择。");
+                    var bestIndex = result.Candidates.FindIndex(match => match.Record.instrumental || match.Record.Document().PlainText.Length > 0);
+                    if (bestIndex >= 0)
+                    {
+                        var best = result.Candidates[bestIndex];
+                        candidates.SelectedItem = best;
+                        PreviewLyrics(best);
+                        var closeAlternative = result.Candidates.Where((match, index) => index != bestIndex)
+                            .Any(match => best.ConfidenceScore - match.ConfidenceScore < 8);
+                        lyricStatus.Text = inference + expanded + "未找到精确匹配，已暂时显示《" + best.Record.trackName + "》的候选歌词，匹配度 "
+                            + best.Score + "% · 置信度 " + best.ConfidenceScore + "%（" + best.Confidence + "）" + (closeAlternative
+                                ? "；另有相近候选，请核对版本。" : "；确认后点击“使用所选歌词”保存。");
+                    }
+                    else lyricStatus.Text = inference + expanded + (result.Candidates.Count == 0
+                        ? "未找到歌词。可修正标题 / 歌手，或导入本地 LRC。"
+                        : "找到候选，但没有可显示的歌词内容；请修正检索信息或导入本地 LRC。");
                 }
             }
             catch (OperationCanceledException) { if (!token.IsCancellationRequested && revision == model.Revision) lyricStatus.Text = "歌词请求超时，可重新搜索或导入 LRC。"; }
@@ -715,19 +785,28 @@ namespace LyricConnector
         private void SetLyrics(LyricRecord record)
         {
             store.Save(model.Track, record);
+            DisplayLyrics(record);
+            lyricStatus.Text = record.Source + " · " + (record.instrumental ? "纯音乐" : lyrics.Synced ? lyrics.Lines.Count + " 行同步歌词" : "纯文本歌词，无时间轴");
+        }
+        private void PreviewLyrics(LyricMatch match)
+        {
+            DisplayLyrics(match.Record);
+            lyricStatus.Text = "暂定候选 · 相似度 " + match.Score + "% · 置信度 " + match.ConfidenceScore + "%（" + match.Confidence + "），尚未保存；可核对候选后确认。";
+        }
+        private void DisplayLyrics(LyricRecord record)
+        {
             selected = record;
             lyrics = record.Document();
-            lyricStatus.Text = record.Source + " · " + (record.instrumental ? "纯音乐" : lyrics.Synced ? lyrics.Lines.Count + " 行同步歌词" : "纯文本歌词，无时间轴");
-            Console.WriteLine("LYRICS: " + lyricStatus.Text);
+            Console.WriteLine("LYRICS: " + record.Source + " · " + (record.instrumental ? "纯音乐" : lyrics.Synced ? lyrics.Lines.Count + " 行同步歌词" : "纯文本歌词，无时间轴"));
             RefreshLyricsViewer();
             Render();
         }
         private void Choose()
         {
             if (!model.Ready || candidateRevision != model.Revision) return;
-            var record = candidates.SelectedItem as LyricRecord;
-            if (record == null) { lyricStatus.Text = "先选择一个候选。"; return; }
-            try { if (queryCancellation != null) queryCancellation.Cancel(); SetLyrics(record); }
+            var match = candidates.SelectedItem as LyricMatch;
+            if (match == null) { lyricStatus.Text = "先选择一个候选。"; return; }
+            try { if (queryCancellation != null) queryCancellation.Cancel(); SetLyrics(match.Record); }
             catch (Exception error) { lyricStatus.Text = "保存歌词失败：" + error.Message; }
         }
         private void Import()
