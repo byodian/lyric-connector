@@ -56,19 +56,19 @@ namespace LyricConnector
             ShowInTaskbar = false;
             ResizeMode = ResizeMode.CanResizeWithGrip;
             Width = settings.Width;
-            Height = 164;
+            Height = 100;
             MinWidth = 360;
-            MinHeight = 128;
+            MinHeight = 92;
             var area = SystemParameters.WorkArea;
             Left = settings.Left < 0 ? area.Left + (area.Width - Width) / 2 : Math.Max(area.Left, Math.Min(settings.Left, area.Right - 120));
             Top = settings.Top < 0 ? area.Bottom - Height - 44 : Math.Max(area.Top, Math.Min(settings.Top, area.Bottom - 60));
-            surface = new Border { CornerRadius = new CornerRadius(12), Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)) };
-            panelBackground = new Border { CornerRadius = new CornerRadius(12), IsHitTestVisible = false };
-            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 8, 20, 8) };
+            surface = new Border { CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)) };
+            panelBackground = new Border { CornerRadius = new CornerRadius(8), IsHitTestVisible = false };
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 1, 20, 1) };
             current = new TextBlock { TextAlignment = TextAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = FontWeights.Medium };
             next = new TextBlock { TextAlignment = TextAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 4, 0, 0) };
+                TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 1, 0, 0) };
             previousTrack = PlaybackButton("播放上一首", PlaybackGlyph(RemoteCommand.PreviousTrack));
             playPause = PlaybackButton("播放或暂停", PlaybackGlyph(RemoteCommand.Play));
             nextTrack = PlaybackButton("播放下一首", PlaybackGlyph(RemoteCommand.NextTrack));
@@ -76,13 +76,13 @@ namespace LyricConnector
             playPause.Click += delegate { RequestRemoteCommand(playPauseCommand); };
             nextTrack.Click += delegate { RequestRemoteCommand(RemoteCommand.NextTrack); };
             controls = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 4, 0, 0), Opacity = 0, IsHitTestVisible = false };
+                Margin = new Thickness(0, 1, 0, 0), Opacity = 0, IsHitTestVisible = false };
             controls.Children.Add(previousTrack);
             controls.Children.Add(playPause);
             controls.Children.Add(nextTrack);
             progressFill = new Border { Height = 2, HorizontalAlignment = HorizontalAlignment.Left,
                 Background = new SolidColorBrush(Color.FromRgb(132, 86, 186)), CornerRadius = new CornerRadius(1), IsHitTestVisible = false };
-            progressTrack = new Border { Width = 220, Height = 2, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 4),
+            progressTrack = new Border { Width = 220, Height = 2, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 1, 0, 1),
                 Background = new SolidColorBrush(Color.FromArgb(128, 150, 146, 160)), CornerRadius = new CornerRadius(1),
                 Child = progressFill, IsHitTestVisible = false };
             progressTrack.SizeChanged += delegate { UpdateProgressFill(); };
@@ -154,7 +154,7 @@ namespace LyricConnector
 
         private static Button PlaybackButton(string name, UIElement icon)
         {
-            var button = new Button { Content = icon, Width = 38, Height = 32, Padding = new Thickness(3), Margin = new Thickness(4, 0, 4, 0),
+            var button = new Button { Content = icon, Width = 34, Height = 24, Padding = new Thickness(2), Margin = new Thickness(2, 0, 2, 0),
                 Background = Brushes.Transparent, BorderBrush = Brushes.Transparent, BorderThickness = new Thickness(1), FocusVisualStyle = null,
                 ToolTip = name };
             AutomationProperties.SetName(button, name);
@@ -187,29 +187,29 @@ namespace LyricConnector
 
         private static Canvas PlaybackGlyph(byte command)
         {
-            var icon = new Canvas { Width = 28, Height = 24, IsHitTestVisible = false };
-            var ink = new SolidColorBrush(Color.FromRgb(248, 247, 250));
+            var icon = new Canvas { Width = 24, Height = 20, IsHitTestVisible = false };
+            var ink = new SolidColorBrush(Color.FromArgb(190, 240, 237, 245));
             if (command == RemoteCommand.PreviousTrack)
             {
-                var bar = new System.Windows.Shapes.Rectangle { Width = 2, Height = 17, Fill = ink, RadiusX = 1, RadiusY = 1 };
-                Canvas.SetLeft(bar, 3); Canvas.SetTop(bar, 3); icon.Children.Add(bar);
-                icon.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new Point(22, 3), new Point(8, 12), new Point(22, 21) }, Fill = ink });
+                var bar = new System.Windows.Shapes.Rectangle { Width = 2, Height = 15, Fill = ink, RadiusX = 1, RadiusY = 1 };
+                Canvas.SetLeft(bar, 2); Canvas.SetTop(bar, 2); icon.Children.Add(bar);
+                icon.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new Point(19, 2), new Point(7, 10), new Point(19, 18) }, Fill = ink });
             }
             else if (command == RemoteCommand.NextTrack)
             {
-                icon.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new Point(6, 3), new Point(20, 12), new Point(6, 21) }, Fill = ink });
-                var bar = new System.Windows.Shapes.Rectangle { Width = 2, Height = 17, Fill = ink, RadiusX = 1, RadiusY = 1 };
-                Canvas.SetLeft(bar, 23); Canvas.SetTop(bar, 3); icon.Children.Add(bar);
+                icon.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new Point(5, 2), new Point(17, 10), new Point(5, 18) }, Fill = ink });
+                var bar = new System.Windows.Shapes.Rectangle { Width = 2, Height = 15, Fill = ink, RadiusX = 1, RadiusY = 1 };
+                Canvas.SetLeft(bar, 20); Canvas.SetTop(bar, 2); icon.Children.Add(bar);
             }
             else if (command == RemoteCommand.Pause)
             {
-                var first = new System.Windows.Shapes.Rectangle { Width = 3, Height = 17, Fill = ink, RadiusX = 1, RadiusY = 1 };
-                var second = new System.Windows.Shapes.Rectangle { Width = 3, Height = 17, Fill = ink, RadiusX = 1, RadiusY = 1 };
-                Canvas.SetLeft(first, 8); Canvas.SetTop(first, 3);
-                Canvas.SetLeft(second, 17); Canvas.SetTop(second, 3);
+                var first = new System.Windows.Shapes.Rectangle { Width = 3, Height = 15, Fill = ink, RadiusX = 1, RadiusY = 1 };
+                var second = new System.Windows.Shapes.Rectangle { Width = 3, Height = 15, Fill = ink, RadiusX = 1, RadiusY = 1 };
+                Canvas.SetLeft(first, 7); Canvas.SetTop(first, 2);
+                Canvas.SetLeft(second, 14); Canvas.SetTop(second, 2);
                 icon.Children.Add(first); icon.Children.Add(second);
             }
-            else icon.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new Point(8, 3), new Point(22, 12), new Point(8, 21) }, Fill = ink });
+            else icon.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new Point(7, 2), new Point(19, 10), new Point(7, 18) }, Fill = ink });
             return icon;
         }
 
