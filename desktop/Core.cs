@@ -110,7 +110,8 @@ namespace LyricConnector
         {
             if (!Ready) throw new InvalidOperationException("歌曲位置尚未就绪。");
             var elapsed = anchor.State == 0 ? 0 : Math.Max(0, timestamp - anchor.Timestamp) / frequency * anchor.Rate;
-            return Math.Max(0, Math.Min(Track.Duration, anchor.Seconds + elapsed));
+            var position = Math.Max(0, anchor.Seconds + elapsed);
+            return Track.Duration > 0 ? Math.Min(Track.Duration, position) : position;
         }
     }
 
@@ -170,6 +171,15 @@ namespace LyricConnector
                 else high = middle;
             }
             return low - 1;
+        }
+
+        public double ProgressAt(int index, double position, double duration, double userOffset)
+        {
+            var line = Lines[index];
+            var end = index + 1 < Lines.Count ? Lines[index + 1].Seconds : duration;
+            if (end <= line.Seconds) return 1;
+            var target = position + userOffset + FileOffset;
+            return Math.Max(0, Math.Min(1, (target - line.Seconds) / (end - line.Seconds)));
         }
     }
 }

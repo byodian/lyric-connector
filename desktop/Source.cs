@@ -104,9 +104,12 @@ namespace LyricConnector
         private long revision;
         private bool dirty = true;
         private bool waitingPublished;
+        private bool snapshotReadStarted;
+        private bool snapshotIssueLogged;
         private volatile bool connectionLost;
         private long metadataChangedAt;
         private Track stableTrack;
+        private string stablePlayer;
 
         public AmsSource(DeviceChoice choice, Action<SourceUpdate> publish, long revision)
         {
@@ -242,21 +245,35 @@ namespace LyricConnector
             return Encoding.UTF8.GetString(Bytes(read));
         }
 
+        internal static double ParseDuration(string value)
+        {
+            if (value.Length == 0) return 0;
+            double duration;
+            if (!Double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out duration)
+                || Double.IsNaN(duration) || Double.IsInfinity(duration) || duration <= 0)
+                throw new FormatException("手机返回了无效的歌曲时长：" + value);
+            return duration;
+        }
+
+        internal static bool IsPositionWithinDuration(double duration, double position)
+        {
+            return duration <= 0 || position <= duration + 0.5;
+        }
+
         private async Task<SourceUpdate> SnapshotAsync(GattCharacteristic attribute, CancellationToken cancellation)
         {
             var title = await ReadAsync(attribute, 2, 2, false, cancellation);
             var artist = await ReadAsync(attribute, 2, 0, true, cancellation);
             var album = await ReadAsync(attribute, 2, 1, true, cancellation);
-            var duration = await ReadAsync(attribute, 2, 3, false, cancellation);
+            var duration = await ReadAsync(attribute, 2, 3, true, cancellation);
             var player = await ReadAsync(attribute, 0, 0, false, cancellation);
             var info = await ReadAsync(attribute, 0, 1, false, cancellation);
             var playback = Playback.Parse(info, Stopwatch.GetTimestamp());
             var artistAfter = await ReadAsync(attribute, 2, 0, true, cancellation);
             var titleAfter = await ReadAsync(attribute, 2, 2, false, cancellation);
-            var length = Double.Parse(duration, CultureInfo.InvariantCulture);
-            if (Double.IsNaN(length) || Double.IsInfinity(length) || length <= 0)
-                throw new FormatException("手机未提供有效的歌曲时长：" + duration);
-            if (title != titleAfter || artist != artistAfter || title.Length == 0 || playback.Seconds > length + 0.5)
+            var length = ParseDuration(duration);
+            if (title != titleAfter || artist != artistAfter || title.Length == 0
+                || !IsPositionWithinDuration(length, playback.Seconds))
                 return null;
             return new SourceUpdate { Kind = UpdateKind.Snapshot, Revision = revision, Player = player,
                 Track = new Track { Title = title, Artist = artist, Album = album, Duration = length }, Playback = playback };
@@ -268,8 +285,13 @@ namespace LyricConnector
             if (packet.Attribute == 0) return packet.Value != track.Artist;
             if (packet.Attribute == 1) return packet.Value != track.Album;
             if (packet.Attribute == 2) return packet.Value != track.Title;
-            if (packet.Attribute == 3) return Math.Abs(Double.Parse(packet.Value, CultureInfo.InvariantCulture) - track.Duration) > 2;
+            if (packet.Attribute == 3) return Math.Abs(ParseDuration(packet.Value) - track.Duration) > 2;
             return false;
+        }
+
+        internal static bool ChangesPlayer(Packet packet, string player)
+        {
+            return packet.Entity == 0 && packet.Attribute == 0 && packet.Value != player;
         }
 
         private void Transition(long timestamp, string message)
@@ -279,6 +301,8 @@ namespace LyricConnector
             {
                 dirty = true;
                 waitingPublished = true;
+                snapshotReadStarted = false;
+                snapshotIssueLogged = false;
                 revision++;
                 publish(new SourceUpdate { Kind = UpdateKind.Transition, Revision = revision, Message = message });
             }
@@ -369,30 +393,45 @@ namespace LyricConnector
                         {
                             if (packet.Truncated) packet.Value = await ReadAsync(attribute, packet.Entity, packet.Attribute, false, cancellation);
                             if (packet.Entity == 2 && (dirty || ChangesTrack(packet, stableTrack))) Transition(packet.Timestamp, "正在切换歌曲");
+                            else if (ChangesPlayer(packet, stablePlayer)) Transition(packet.Timestamp, "正在切换播放器");
                             else if (packet.Entity == 0 && packet.Attribute == 1 && !dirty)
                                 publish(new SourceUpdate { Kind = UpdateKind.Playback, Revision = revision, Playback = Playback.Parse(packet.Value, packet.Timestamp) });
                         }
                         var now = Stopwatch.GetTimestamp();
                         if (dirty && (now - metadataChangedAt) / (double)Stopwatch.Frequency >= 1)
                         {
+                            if (!snapshotReadStarted)
+                            {
+                                Console.WriteLine("AMS: Reading current media snapshot");
+                                snapshotReadStarted = true;
+                            }
                             var snapshot = await SnapshotAsync(attribute, cancellation);
+                            if (snapshot == null && !snapshotIssueLogged)
+                            {
+                                Console.WriteLine("AMS: Media metadata changed while being read; retrying");
+                                snapshotIssueLogged = true;
+                            }
                             var conflicts = false;
                             while (packets.TryDequeue(out packet))
                             {
                                 if (packet.Truncated) packet.Value = await ReadAsync(attribute, packet.Entity, packet.Attribute, false, cancellation);
                                 if (snapshot != null && ChangesTrack(packet, snapshot.Track)) conflicts = true;
+                                if (snapshot != null && ChangesPlayer(packet, snapshot.Player)) conflicts = true;
                                 if (snapshot != null && packet.Entity == 0 && packet.Attribute == 1)
                                 {
                                     var latest = Playback.Parse(packet.Value, packet.Timestamp);
                                     if (latest.Timestamp > snapshot.Playback.Timestamp) snapshot.Playback = latest;
-                                    if (latest.Seconds > snapshot.Track.Duration + 0.5) conflicts = true;
+                                    if (snapshot.Track.Duration > 0 && latest.Seconds > snapshot.Track.Duration + 0.5) conflicts = true;
                                 }
                             }
                             if (snapshot != null && !conflicts)
                             {
                                 stableTrack = snapshot.Track;
+                                stablePlayer = snapshot.Player;
                                 dirty = false;
                                 waitingPublished = false;
+                                snapshotReadStarted = false;
+                                snapshotIssueLogged = false;
                                 publish(snapshot);
                             }
                             else metadataChangedAt = Stopwatch.GetTimestamp();
@@ -401,7 +440,12 @@ namespace LyricConnector
                         {
                             healthAt = now;
                             var title = await ReadAsync(attribute, 2, 2, false, cancellation);
+                            var player = await ReadAsync(attribute, 0, 0, false, cancellation);
+                            var duration = ParseDuration(await ReadAsync(attribute, 2, 3, true, cancellation));
                             if (title != stableTrack.Title) Transition(now, "正在切换歌曲");
+                            else if (player != stablePlayer) Transition(now, "正在切换播放器");
+                            else if (duration > 0 && (stableTrack.Duration <= 0 || Math.Abs(duration - stableTrack.Duration) > 2))
+                                Transition(now, "正在校准歌曲信息");
                             else
                             {
                                 var value = await ReadAsync(attribute, 0, 1, false, cancellation);
@@ -411,7 +455,11 @@ namespace LyricConnector
                     }
                     catch (FormatException error)
                     {
-                        if (!dirty || !waitingPublished) Console.WriteLine("AMS_INVALID_STATE: " + error.Message);
+                        if (!snapshotIssueLogged)
+                        {
+                            Console.WriteLine("AMS_INVALID_STATE: " + error.Message);
+                            snapshotIssueLogged = true;
+                        }
                         Transition(Stopwatch.GetTimestamp(), "等待手机提供有效进度");
                     }
                     await Task.Delay(80, cancellation).ConfigureAwait(false);

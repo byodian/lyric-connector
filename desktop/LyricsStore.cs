@@ -19,7 +19,7 @@ namespace LyricConnector
         public string trackName { get; set; }
         public string artistName { get; set; }
         public string albumName { get; set; }
-        public double duration { get; set; }
+        public double? duration { get; set; }
         public bool instrumental { get; set; }
         public string syncedLyrics { get; set; }
         public string plainLyrics { get; set; }
@@ -40,6 +40,7 @@ namespace LyricConnector
     {
         public LyricRecord Selected { get; set; }
         public List<LyricRecord> Candidates { get; set; }
+        public bool ExpandedSearch { get; set; }
     }
 
     public sealed class LyricsStore : IDisposable
@@ -97,7 +98,7 @@ namespace LyricConnector
             if (File.Exists(cache))
                 return new LyricResult { Selected = new JavaScriptSerializer().Deserialize<LyricRecord>(File.ReadAllText(cache, Encoding.UTF8)), Candidates = new List<LyricRecord>() };
             var query = SongQuery.Infer(track);
-            if (!query.Inferred && track.Artist.Length > 0)
+            if (!query.Inferred && track.Artist.Length > 0 && track.Duration > 0)
             {
                 var signature = "track_name=" + Uri.EscapeDataString(track.Title) + "&artist_name=" + Uri.EscapeDataString(track.Artist)
                     + "&duration=" + track.Duration.ToString("0.###", CultureInfo.InvariantCulture);
@@ -108,13 +109,40 @@ namespace LyricConnector
                     var record = new JavaScriptSerializer().Deserialize<LyricRecord>(exact);
                     if (String.Equals(record.trackName, track.Title, StringComparison.OrdinalIgnoreCase)
                         && String.Equals(record.artistName, track.Artist, StringComparison.OrdinalIgnoreCase)
-                        && Math.Abs(record.duration - track.Duration) <= 2)
+                        && record.duration.HasValue && Math.Abs(record.duration.Value - track.Duration) <= 2)
                         return new LyricResult { Selected = record, Candidates = new List<LyricRecord>() };
                 }
             }
             var candidates = await SearchAsync(query.Title, query.Artist, cancellation).ConfigureAwait(false);
-            return new LyricResult { Candidates = candidates.OrderBy(record => String.IsNullOrEmpty(record.syncedLyrics) ? 1 : 0)
-                .ThenBy(record => Math.Abs(record.duration - track.Duration)).ToList() };
+            var directSyncedMatch = candidates.Any(record => String.Equals(record.trackName, query.Title, StringComparison.OrdinalIgnoreCase)
+                && (query.Artist.Length == 0 || String.Equals(record.artistName, query.Artist, StringComparison.OrdinalIgnoreCase))
+                && !String.IsNullOrWhiteSpace(record.syncedLyrics));
+            var expandedSearch = !directSyncedMatch;
+            if (expandedSearch)
+            {
+                var related = new List<LyricRecord>();
+                if (track.Album.Length > 0)
+                {
+                    var albumResults = await QueryAnyFieldAsync(track.Album, cancellation).ConfigureAwait(false);
+                    related.AddRange(albumResults.Where(record => Contains(record.albumName, track.Album)
+                        || Contains(record.artistName, query.Artist) || Contains(record.artistName, track.Artist)));
+                }
+                if (related.Count == 0 && query.Artist.Length > 0)
+                {
+                    var artistResults = await QueryAnyFieldAsync(query.Artist, cancellation).ConfigureAwait(false);
+                    related.AddRange(artistResults.Where(record => Contains(record.artistName, query.Artist)
+                        || Contains(record.artistName, track.Artist)));
+                }
+                candidates.AddRange(related);
+            }
+            var unique = candidates.GroupBy(CandidateKey).Select(group => group.First());
+            return new LyricResult { ExpandedSearch = expandedSearch, Candidates = unique
+                .OrderBy(record => String.IsNullOrEmpty(record.syncedLyrics) ? 1 : 0)
+                .ThenBy(record => String.Equals(record.trackName, query.Title, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(record => String.Equals(record.artistName, query.Artist, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(record => String.Equals(record.albumName, track.Album, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(record => track.Duration > 0 && record.duration.HasValue
+                    ? Math.Abs(record.duration.Value - track.Duration) : Double.MaxValue).ToList() };
         }
 
         public async Task<List<LyricRecord>> SearchAsync(string title, string artist, CancellationToken cancellation)
@@ -132,6 +160,24 @@ namespace LyricConnector
             var response = await GetAsync("/api/search?" + query, cancellation).ConfigureAwait(false);
             if (response == null) return new List<LyricRecord>();
             return new JavaScriptSerializer().Deserialize<List<LyricRecord>>(response);
+        }
+
+        private async Task<List<LyricRecord>> QueryAnyFieldAsync(string term, CancellationToken cancellation)
+        {
+            var response = await GetAsync("/api/search?q=" + Uri.EscapeDataString(term), cancellation).ConfigureAwait(false);
+            if (response == null) return new List<LyricRecord>();
+            return new JavaScriptSerializer().Deserialize<List<LyricRecord>>(response);
+        }
+
+        private static bool Contains(string value, string term)
+        {
+            return value != null && term.Length > 0 && value.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string CandidateKey(LyricRecord record)
+        {
+            return record.id > 0 ? "id:" + record.id.ToString(CultureInfo.InvariantCulture)
+                : String.Join("\n", record.trackName ?? "", record.artistName ?? "", record.albumName ?? "");
         }
 
         public void Dispose() { http.Dispose(); }

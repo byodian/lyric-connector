@@ -37,6 +37,11 @@ namespace LyricConnector
                     var result = store.FindAsync(video, CancellationToken.None).GetAwaiter().GetResult();
                     Check(result.Candidates.Count > 0 && result.Selected == null, "mixed video title finds candidates without selecting an unverified cover version");
                     Console.WriteLine("INFERRED_PROVIDER: title=" + SongQuery.Infer(video).Title + " candidates=" + result.Candidates.Count);
+                    var translatedTitle = new Track { Title = "Definitely Not a LRCLIB Title", Artist = "Jay Chou", Album = "十一月的萧邦", Duration = 0 };
+                    var expanded = store.FindAsync(translatedTitle, CancellationToken.None).GetAwaiter().GetResult();
+                    Check(expanded.ExpandedSearch && expanded.Candidates.Any(record => record.Document().Synced),
+                        "unmatched title expands to album or artist candidates without auto-selection");
+                    Console.WriteLine("EXPANDED_PROVIDER: candidates=" + expanded.Candidates.Count);
                 }
             }
             finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
@@ -61,11 +66,33 @@ namespace LyricConnector
             var second = new Track { Title = "B", Artist = "Artist", Album = "", Duration = 120 };
             model.Accept(Snapshot(2, second, "1,1.0,0", 6000));
             Check(model.Ready && model.Position(7000) == 1 && model.Track.Title == "B", "new song has independent anchor");
+            var durationless = new Track { Title = "C", Artist = "Artist", Album = "", Duration = 0 };
+            model.Accept(Snapshot(3, durationless, "1,1.0,20", 8000));
+            Check(model.Ready && model.Position(9500) == 21.5, "playback advances when total duration is unavailable");
+            Check(AmsSource.ParseDuration("") == 0 && AmsSource.ParseDuration("180.5") == 180.5,
+                "missing track duration is optional while valid duration is retained");
+            Check(AmsSource.IsPositionWithinDuration(0, 20) && !AmsSource.IsPositionWithinDuration(30, 31),
+                "position validation does not reject a track with unknown duration");
+            var invalidDurationRejected = false;
+            try { AmsSource.ParseDuration("Infinity"); }
+            catch (FormatException) { invalidDurationRejected = true; }
+            Check(invalidDurationRejected, "invalid track duration is rejected");
+            var missingLyricsDuration = new JavaScriptSerializer().Deserialize<LyricRecord>(
+                "{\"id\":42,\"trackName\":\"中文曲名\",\"artistName\":\"歌手\",\"duration\":null,\"syncedLyrics\":\"[00:01.00]歌词\"}");
+            Check(!missingLyricsDuration.duration.HasValue && missingLyricsDuration.ToString().Contains("中文曲名"),
+                "LRCLIB candidate with an empty duration remains readable");
             model.Accept(new SourceUpdate { Kind = UpdateKind.Disconnected, Revision = 3, Message = "disconnected" });
             Check(!model.Ready, "disconnect clears timeline");
+            var playerUpdate = new Packet { Entity = 0, Attribute = 0, Value = "Apple Music" };
+            Check(AmsSource.ChangesPlayer(playerUpdate, "YouTube Music"), "player change triggers a fresh media snapshot");
+            Check(!AmsSource.ChangesPlayer(playerUpdate, "Apple Music"), "same player name does not restart the media snapshot");
             var lines = Lyrics.Parse("[ar:A]\n[offset:250]\n[00:02.50][00:04.5]same\n[00:04.500]translation\n[00:08]last");
             Check(lines.Lines.Count == 3 && lines.Lines[1].Text == "same / translation", "multiple stamps and duplicate-time translation");
             Check(lines.IndexAt(2, 0) == -1 && lines.IndexAt(2, 0.25) == 0, "file and user offsets advance lyrics");
+            Check(Math.Abs(lines.ProgressAt(0, 3.25, 10, 0) - 0.5) < 0.00001,
+                "karaoke fill advances across a lyric line between timestamps");
+            Check(lines.ProgressAt(1, 7.75, 10, 0) == 1 && lines.ProgressAt(2, 9, 0, 0) == 1,
+                "karaoke fill completes at the next line or holds the final line without duration");
             Check(lines.IndexAt(99, 0) == 2 && lines.IndexAt(0, 0) == -1, "lyric boundary lookup");
             Check(!Lyrics.Parse("plain words").Synced, "plain lyrics have no fabricated timeline");
             Check(new LyricRecord { syncedLyrics = "", plainLyrics = "plain words" }.Document().PlainText == "plain words", "empty timed lyrics retain provider plain text");
