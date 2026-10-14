@@ -198,7 +198,7 @@ namespace LyricConnector
             var border = new FrameworkElementFactory(typeof(Border));
             border.Name = "buttonSurface";
             var templatedParent = new RelativeSource(RelativeSourceMode.TemplatedParent);
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(9));
             border.SetBinding(Border.BackgroundProperty, new Binding("Background") { RelativeSource = templatedParent });
             border.SetBinding(Border.BorderBrushProperty, new Binding("BorderBrush") { RelativeSource = templatedParent });
             border.SetBinding(Border.BorderThicknessProperty, new Binding("BorderThickness") { RelativeSource = templatedParent });
@@ -224,16 +224,16 @@ namespace LyricConnector
         private static Canvas PlaybackGlyph(byte command)
         {
             var icon = new Canvas { Width = 24, Height = 20, IsHitTestVisible = false };
-            var ink = new SolidColorBrush(Color.FromArgb(190, 240, 237, 245));
+            var ink = new SolidColorBrush(Color.FromRgb(132, 86, 186));
             if (command == RemoteCommand.PreviousTrack)
             {
                 var bar = new System.Windows.Shapes.Rectangle { Width = 2, Height = 15, Fill = ink, RadiusX = 1, RadiusY = 1 };
                 Canvas.SetLeft(bar, 2); Canvas.SetTop(bar, 2); icon.Children.Add(bar);
-                icon.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new Point(19, 2), new Point(7, 10), new Point(19, 18) }, Fill = ink });
+                icon.Children.Add(PlaybackTriangle(new Point(19, 2), new Point(7, 10), new Point(19, 18), ink));
             }
             else if (command == RemoteCommand.NextTrack)
             {
-                icon.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new Point(5, 2), new Point(17, 10), new Point(5, 18) }, Fill = ink });
+                icon.Children.Add(PlaybackTriangle(new Point(5, 2), new Point(17, 10), new Point(5, 18), ink));
                 var bar = new System.Windows.Shapes.Rectangle { Width = 2, Height = 15, Fill = ink, RadiusX = 1, RadiusY = 1 };
                 Canvas.SetLeft(bar, 20); Canvas.SetTop(bar, 2); icon.Children.Add(bar);
             }
@@ -245,8 +245,42 @@ namespace LyricConnector
                 Canvas.SetLeft(second, 14); Canvas.SetTop(second, 2);
                 icon.Children.Add(first); icon.Children.Add(second);
             }
-            else icon.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new Point(7, 2), new Point(19, 10), new Point(7, 18) }, Fill = ink });
+            else icon.Children.Add(PlaybackTriangle(new Point(7, 2), new Point(19, 10), new Point(7, 18), ink));
             return icon;
+        }
+
+        private static System.Windows.Shapes.Path PlaybackTriangle(Point first, Point second, Point third, Brush fill)
+        {
+            var points = new[] { first, second, third };
+            var entry = new Point[3];
+            var exit = new Point[3];
+            const double cornerRadius = 1.1;
+            for (var i = 0; i < points.Length; i++)
+            {
+                var vertex = points[i];
+                var previous = points[(i + 2) % points.Length];
+                var following = points[(i + 1) % points.Length];
+                var previousLength = Math.Sqrt(Math.Pow(previous.X - vertex.X, 2) + Math.Pow(previous.Y - vertex.Y, 2));
+                var followingLength = Math.Sqrt(Math.Pow(following.X - vertex.X, 2) + Math.Pow(following.Y - vertex.Y, 2));
+                var radius = Math.Min(cornerRadius, Math.Min(previousLength, followingLength) * 0.25);
+                entry[i] = new Point(vertex.X + (previous.X - vertex.X) * radius / previousLength,
+                    vertex.Y + (previous.Y - vertex.Y) * radius / previousLength);
+                exit[i] = new Point(vertex.X + (following.X - vertex.X) * radius / followingLength,
+                    vertex.Y + (following.Y - vertex.Y) * radius / followingLength);
+            }
+            var geometry = new StreamGeometry();
+            using (var context = geometry.Open())
+            {
+                context.BeginFigure(entry[0], true, true);
+                for (var i = 0; i < points.Length; i++)
+                {
+                    context.QuadraticBezierTo(points[i], exit[i], true, true);
+                    context.LineTo(entry[(i + 1) % points.Length], true, true);
+                }
+            }
+            geometry.Freeze();
+            return new System.Windows.Shapes.Path { Data = geometry, Fill = fill, Stretch = Stretch.None, Width = 24, Height = 20,
+                IsHitTestVisible = false };
         }
 
         private void SetControlsVisible(bool visible)
