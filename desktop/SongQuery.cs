@@ -6,7 +6,7 @@ namespace LyricConnector
 {
     public sealed class SongQuery
     {
-        private static readonly Regex noise = new Regex(@"KTV|字幕|歌詞|歌词|lyrics?|official|music\s*video|\bMV\b|\bHD\b|\b4K\b|1080p|全新|cover|翻唱|原唱|\bOST\b|伴奏|\blive\b|remix", RegexOptions.IgnoreCase);
+        private static readonly Regex noise = new Regex(@"KTV|字幕|歌詞|歌词|lyrics?|official|music\s*video|\bMV\b|\bHD\b|\b4K\b|1080p|全新|cover|翻唱|原唱|\bOST\b|伴奏|remix", RegexOptions.IgnoreCase);
         private static readonly Regex annotations = new Regex(@"\[[^\[\]]*\]|【[^【】]*】|\([^()]*\)|（[^（）]*）");
         public string Title { get; private set; }
         public string Artist { get; private set; }

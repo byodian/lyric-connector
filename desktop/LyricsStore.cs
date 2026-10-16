@@ -81,7 +81,7 @@ namespace LyricConnector
             var weighted = 0.0;
             var weights = 0.0;
             var expectedWeights = 0.45;
-            AddScore(Similarity(title, record.trackName), 0.45, ref weighted, ref weights);
+            AddScore(TitleSimilarity(title, record.trackName), 0.45, ref weighted, ref weights);
             if (!String.IsNullOrWhiteSpace(artist))
             {
                 expectedWeights += 0.25;
@@ -103,7 +103,7 @@ namespace LyricConnector
             var candidateVersion = record.trackName + " " + record.albumName;
             var penalty = 0;
             foreach (var group in versions)
-                if (HasVersion(candidateVersion, group) && !HasVersion(expectedVersion, group)) penalty += 12;
+                if (HasVersion(candidateVersion, group) != HasVersion(expectedVersion, group)) penalty += 12;
             var score = (int)Math.Max(0, Math.Min(100, Math.Round(weighted / weights * 100) - penalty));
             return new LyricMatch { Record = record, Score = score, EvidenceScore = (int)Math.Round(weights / expectedWeights * 100) };
         }
@@ -112,6 +112,18 @@ namespace LyricConnector
         {
             weighted += score * weight;
             weights += weight;
+        }
+
+        private static double TitleSimilarity(string expected, string candidate)
+        {
+            var best = Similarity(expected, candidate);
+            foreach (Match bracket in Regex.Matches(candidate, @"\[([^\[\]]+)\]|【([^【】]+)】"))
+            {
+                var alias = bracket.Groups[1].Success ? bracket.Groups[1].Value : bracket.Groups[2].Value;
+                if (!versions.Any(markers => HasVersion(alias, markers)))
+                    best = Math.Max(best, Similarity(expected, alias));
+            }
+            return best;
         }
 
         private static bool HasVersion(string value, string[] markers)
@@ -232,8 +244,8 @@ namespace LyricConnector
             using (var response = await http.GetAsync("https://lrclib.net" + path, cancellation).ConfigureAwait(false))
             {
                 if (response.StatusCode == HttpStatusCode.NotFound) return null;
-                if (response.StatusCode == HttpStatusCode.ServiceUnavailable)
-                    throw new HttpRequestException("歌词服务暂时不可用，请稍后重新搜索或导入 LRC。");
+                if ((int)response.StatusCode == 429 || (int)response.StatusCode >= 500)
+                    throw new HttpRequestException("歌词服务暂时不可用。");
                 response.EnsureSuccessStatusCode();
                 return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             }

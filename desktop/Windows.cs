@@ -24,6 +24,7 @@ namespace LyricConnector
     {
         private readonly Border surface;
         private readonly Border panelBackground;
+        private readonly TextBlock previous;
         private readonly TextBlock current;
         private readonly TextBlock next;
         private readonly GradientStop karaokeFillStart;
@@ -63,15 +64,15 @@ namespace LyricConnector
             ShowInTaskbar = false;
             ResizeMode = ResizeMode.CanResizeWithGrip;
             Width = settings.Width;
-            Height = 100;
+            Height = Math.Max(136, settings.FontSize * 3 + 32);
             MinWidth = 360;
-            MinHeight = 92;
+            MinHeight = Math.Max(126, settings.FontSize * 3 + 24);
             var area = SystemParameters.WorkArea;
             Left = settings.Left < 0 ? area.Left + (area.Width - Width) / 2 : Math.Max(area.Left, Math.Min(settings.Left, area.Right - 120));
             Top = settings.Top < 0 ? area.Bottom - Height - 44 : Math.Max(area.Top, Math.Min(settings.Top, area.Bottom - 60));
             surface = new Border { CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)) };
             panelBackground = new Border { CornerRadius = new CornerRadius(8), IsHitTestVisible = false };
-            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 1, 20, 1) };
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(20, 5, 20, 5) };
             karaokeFillColor = (Color)ColorConverter.ConvertFromString(settings.CurrentLineColor);
             karaokeBaseColor = (Color)ColorConverter.ConvertFromString(settings.NextLineColor);
             karaokeFillStart = new GradientStop(karaokeFillColor, 0);
@@ -84,11 +85,15 @@ namespace LyricConnector
             karaokeBrush.GradientStops.Add(karaokeFillEnd);
             karaokeBrush.GradientStops.Add(karaokeBaseStart);
             karaokeBrush.GradientStops.Add(karaokeBaseEnd);
+            previous = new TextBlock { TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+                Opacity = 0.55 };
             current = new TextBlock { TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
-                FontWeight = FontWeights.Medium, Foreground = karaokeBrush };
+                FontWeight = FontWeights.Medium, Foreground = karaokeBrush, Margin = new Thickness(0, 1, 0, 1) };
             next = new TextBlock { TextAlignment = TextAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 1, 0, 0) };
+                HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(0, 0, 0, 1) };
             previousTrack = PlaybackButton("播放上一首", PlaybackGlyph(RemoteCommand.PreviousTrack));
             playPause = PlaybackButton("播放或暂停", PlaybackGlyph(RemoteCommand.Play));
             nextTrack = PlaybackButton("播放下一首", PlaybackGlyph(RemoteCommand.NextTrack));
@@ -114,6 +119,7 @@ namespace LyricConnector
             };
             var content = new Grid();
             content.Children.Add(panelBackground);
+            text.Children.Add(previous);
             text.Children.Add(current);
             text.Children.Add(next);
             text.Children.Add(progressTrack);
@@ -131,16 +137,23 @@ namespace LyricConnector
                 args.Handled = true;
             };
             Closed += delegate { controlsHideTimer.Stop(); };
+            previous.MouseLeftButtonDown += delegate(object sender, System.Windows.Input.MouseButtonEventArgs args)
+            { if (!through && args.ClickCount == 1) DragMove(); };
             current.MouseLeftButtonDown += delegate(object sender, System.Windows.Input.MouseButtonEventArgs args)
             { if (!through && args.ClickCount == 1) DragMove(); };
             next.MouseLeftButtonDown += delegate(object sender, System.Windows.Input.MouseButtonEventArgs args)
             { if (!through && args.ClickCount == 1) DragMove(); };
             SourceInitialized += delegate { Apply(settings); };
             SetPlaybackControls(false, false, RemoteCommand.TogglePlayPause, false, false);
-            SetText("等待 iPhone 的播放状态", "桌面控制窗口负责歌词与显示设置");
+            SetText("", "等待 iPhone 的播放状态", "桌面控制窗口负责歌词与显示设置");
         }
 
-        public void SetText(string first, string second) { current.Text = first; next.Text = second; }
+        public void SetText(string before, string active, string after)
+        {
+            previous.Text = String.IsNullOrEmpty(before) ? "\u00A0" : before;
+            current.Text = String.IsNullOrEmpty(active) ? "\u00A0" : active;
+            next.Text = String.IsNullOrEmpty(after) ? "\u00A0" : after;
+        }
         public void SetKaraokeProgress(double progress)
         {
             karaokeProgress = Math.Max(0, Math.Min(1, progress));
@@ -310,13 +323,21 @@ namespace LyricConnector
             through = settings.ClickThrough;
             UpdatePlaybackControls();
             Topmost = settings.Topmost;
-            current.FontFamily = next.FontFamily = new FontFamily(settings.Font);
+            previous.FontFamily = current.FontFamily = next.FontFamily = new FontFamily(settings.Font);
             karaokeFillColor = (Color)ColorConverter.ConvertFromString(settings.CurrentLineColor);
             karaokeBaseColor = (Color)ColorConverter.ConvertFromString(settings.NextLineColor);
-            next.Foreground = (SolidColorBrush)new BrushConverter().ConvertFromString(settings.NextLineColor);
+            previous.Foreground = next.Foreground = (SolidColorBrush)new BrushConverter().ConvertFromString(settings.NextLineColor);
             SetKaraokeProgress(karaokeProgress);
             current.FontSize = settings.FontSize;
-            next.FontSize = Math.Max(12, settings.FontSize * 0.72);
+            previous.FontSize = next.FontSize = Math.Max(12, settings.FontSize * 0.72);
+            var minimumHeight = Math.Max(126, Math.Ceiling(settings.FontSize * 3 + 24));
+            MinHeight = minimumHeight;
+            if (Height < minimumHeight)
+            {
+                var bottom = Top + Height;
+                Height = minimumHeight;
+                Top = Math.Max(SystemParameters.WorkArea.Top, bottom - Height);
+            }
             panelBackground.Background = new SolidColorBrush(Color.FromArgb((byte)(255 * settings.BackgroundOpacity), 27, 23, 41));
             var window = new WindowInteropHelper(this).Handle;
             if (window != IntPtr.Zero)
@@ -337,6 +358,7 @@ namespace LyricConnector
         private readonly LyricWindow overlay;
         private readonly DispatcherTimer ticker;
         private readonly DispatcherTimer reconnectTimer;
+        private readonly DispatcherTimer lyricsRetryTimer;
         private readonly ComboBox devices = new ComboBox { MinWidth = 210 };
         private readonly TextBlock sourceStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
         private readonly TextBlock trackTitle = new TextBlock { FontSize = 23, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
@@ -354,6 +376,10 @@ namespace LyricConnector
         private bool reconnectAttemptInProgress;
         private AmsSource activeSource;
         private CancellationTokenSource queryCancellation;
+        private bool lyricsRetryManual;
+        private string lyricsRetryTitle;
+        private string lyricsRetryArtist;
+        private long lyricsRetryRevision = -1;
         private long connectionGeneration;
         private long candidateRevision = -1;
         private Lyrics lyrics;
@@ -448,7 +474,7 @@ namespace LyricConnector
             searchArtist.ToolTip = "歌手名称；可留空以扩大检索";
             root.Children.Add(searchTitle);
             root.Children.Add(searchArtist);
-            root.Children.Add(Row(Button("搜索候选", async delegate { await FindLyricsAsync(true); }), Button("导入 LRC", delegate { Import(); })));
+            root.Children.Add(Row(Button("搜索候选", async delegate { await FindLyricsAsync(true, searchTitle.Text, searchArtist.Text); }), Button("导入 LRC", delegate { Import(); })));
             root.Children.Add(candidates);
             root.Children.Add(Row(Button("使用所选歌词", delegate { Choose(); }), Button("查看歌词文本", delegate { ShowText(); })));
             root.Children.Add(Label("悬浮窗口"));
@@ -488,6 +514,13 @@ namespace LyricConnector
             ticker.Tick += delegate { Render(); };
             reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             reconnectTimer.Tick += async delegate { await TryAutoReconnectAsync(); };
+            lyricsRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+            lyricsRetryTimer.Tick += async delegate
+            {
+                lyricsRetryTimer.Stop();
+                if (closing || !model.Ready || lyricsRetryRevision != model.Revision) return;
+                await FindLyricsAsync(lyricsRetryManual, lyricsRetryTitle, lyricsRetryArtist);
+            };
             SourceInitialized += delegate
             {
                 var handle = new WindowInteropHelper(this).Handle;
@@ -517,6 +550,7 @@ namespace LyricConnector
                 cleanupStarted = true;
                 ticker.Stop();
                 reconnectTimer.Stop();
+                lyricsRetryTimer.Stop();
                 connectionGeneration++;
                 if (queryCancellation != null) queryCancellation.Cancel();
                 if (sourceCancellation != null) sourceCancellation.Cancel();
@@ -736,6 +770,7 @@ namespace LyricConnector
             if (changed || update.Kind == UpdateKind.Transition || update.Kind == UpdateKind.Disconnected)
             {
                 if (queryCancellation != null) queryCancellation.Cancel();
+                lyricsRetryTimer.Stop();
                 lyrics = null; selected = null; candidates.ItemsSource = null; candidateRevision = -1;
                 lyricStatus.Text = "";
                 RefreshLyricsViewer();
@@ -752,17 +787,20 @@ namespace LyricConnector
                 {
                     searchTitle.Text = query.Title;
                     searchArtist.Text = query.Artist;
-                    var pending = FindLyricsAsync(false);
+                    var pending = FindLyricsAsync(false, "", "");
                 }
             }
             else { trackTitle.Text = "等待歌曲信息"; artist.Text = ""; progress.Text = ""; }
             Render();
         }
 
-        private async Task FindLyricsAsync(bool manual)
+        private async Task FindLyricsAsync(bool manual, string requestedTitle, string requestedArtist)
         {
+            lyricsRetryTimer.Stop();
             if (!model.Ready) { lyricStatus.Text = "歌曲就绪后可检索歌词。"; return; }
-            if (manual && searchTitle.Text.Trim().Length == 0) { lyricStatus.Text = "请输入歌曲名称。"; return; }
+            var title = manual ? requestedTitle.Trim() : "";
+            var artistName = manual ? requestedArtist.Trim() : "";
+            if (manual && title.Length == 0) { lyricStatus.Text = "请输入歌曲名称。"; return; }
             if (queryCancellation != null) queryCancellation.Cancel();
             queryCancellation = new CancellationTokenSource();
             var token = queryCancellation.Token;
@@ -774,8 +812,8 @@ namespace LyricConnector
             try
             {
                 var result = manual
-                    ? new LyricResult { Candidates = LyricMatcher.Rank(track, searchTitle.Text.Trim(), searchArtist.Text.Trim(),
-                        await store.SearchAsync(searchTitle.Text.Trim(), searchArtist.Text.Trim(), token)) }
+                    ? new LyricResult { Candidates = LyricMatcher.Rank(track, title, artistName,
+                        await store.SearchAsync(title, artistName, token)) }
                     : await store.FindAsync(track, token);
                 if (token.IsCancellationRequested || closing || revision != model.Revision) return;
                 if (result.Selected != null) SetLyrics(result.Selected);
@@ -791,12 +829,19 @@ namespace LyricConnector
                     {
                         var best = result.Candidates[bestIndex];
                         candidates.SelectedItem = best;
-                        PreviewLyrics(best);
-                        var closeAlternative = result.Candidates.Where((match, index) => index != bestIndex)
-                            .Any(match => best.ConfidenceScore - match.ConfidenceScore < 8);
-                        lyricStatus.Text = inference + expanded + "未找到精确匹配，已暂时显示《" + best.Record.trackName + "》的候选歌词，匹配度 "
-                            + best.Score + "% · 置信度 " + best.ConfidenceScore + "%（" + best.Confidence + "）" + (closeAlternative
-                                ? "；另有相近候选，请核对版本。" : "；确认后点击“使用所选歌词”保存。");
+                        if (best.ConfidenceScore < 80)
+                            lyricStatus.Text = inference + expanded + "找到候选，但最高置信度为 " + best.ConfidenceScore
+                                + "%（" + best.Confidence + "），未自动应用；请核对标题和版本后点击“使用所选歌词”。";
+                        else
+                        {
+                            SetLyrics(best.Record);
+                            var closeAlternative = result.Candidates.Where((match, index) => index != bestIndex)
+                                .Any(match => best.ConfidenceScore - match.ConfidenceScore < 8);
+                            var lyricType = best.Record.instrumental ? "纯音乐" : lyrics.Synced ? "同步歌词" : "纯文本歌词";
+                            lyricStatus.Text = inference + expanded + "已自动选择《" + best.Record.trackName + "》的" + lyricType + "（相似度 "
+                                + best.Score + "% · 置信度 " + best.ConfidenceScore + "%（" + best.Confidence + "））" + (closeAlternative
+                                    ? "；候选列表中还有相近结果，可随时切换。" : "。");
+                        }
                     }
                     else lyricStatus.Text = inference + expanded + (result.Candidates.Count == 0
                         ? "未找到歌词。可修正标题 / 歌手，或导入本地 LRC。"
@@ -810,22 +855,30 @@ namespace LyricConnector
                 {
                     Console.WriteLine("LYRICS_ERROR: " + error.Message);
                     var serviceError = error as System.Net.Http.HttpRequestException;
-                    lyricStatus.Text = serviceError != null && serviceError.Message.StartsWith("歌词服务", StringComparison.Ordinal)
-                        ? serviceError.Message : "歌词查询暂时失败，请检查网络后重试，或导入本地 LRC。";
+                    var serviceUnavailable = serviceError != null && serviceError.Message.StartsWith("歌词服务", StringComparison.Ordinal);
+                    lyricStatus.Text = serviceUnavailable
+                        ? "歌词服务暂时不可用，每 10 秒自动重试；也可导入本地 LRC。"
+                        : "歌词查询暂时失败，请检查网络后重试，或导入本地 LRC。";
+                    if (serviceUnavailable) ScheduleLyricsRetry(manual, title, artistName, revision);
                 }
             }
         }
 
+        private void ScheduleLyricsRetry(bool manual, string title, string artistName, long revision)
+        {
+            lyricsRetryManual = manual;
+            lyricsRetryTitle = title;
+            lyricsRetryArtist = artistName;
+            lyricsRetryRevision = revision;
+            lyricsRetryTimer.Start();
+        }
+
         private void SetLyrics(LyricRecord record)
         {
+            lyricsRetryTimer.Stop();
             store.Save(model.Track, record);
             DisplayLyrics(record);
             lyricStatus.Text = record.Source + " · " + (record.instrumental ? "纯音乐" : lyrics.Synced ? lyrics.Lines.Count + " 行同步歌词" : "纯文本歌词，无时间轴");
-        }
-        private void PreviewLyrics(LyricMatch match)
-        {
-            DisplayLyrics(match.Record);
-            lyricStatus.Text = "暂定候选 · 相似度 " + match.Score + "% · 置信度 " + match.ConfidenceScore + "%（" + match.Confidence + "），尚未保存；可核对候选后确认。";
         }
         private void DisplayLyrics(LyricRecord record)
         {
@@ -942,22 +995,25 @@ namespace LyricConnector
         private void Render()
         {
             UpdatePlaybackControls();
-            if (!model.Ready) { UpdateLyricsViewer(-1); overlay.SetProgress(0, 0); overlay.SetKaraokeProgress(1); overlay.SetText(model.Status, "在桌面控制窗口中连接 iPhone"); return; }
+            if (!model.Ready) { UpdateLyricsViewer(-1); overlay.SetProgress(0, 0); overlay.SetKaraokeProgress(1); overlay.SetText("", model.Status, "在桌面控制窗口中连接 iPhone"); return; }
             var position = model.Position(Stopwatch.GetTimestamp());
             overlay.SetProgress(position, model.Track.Duration);
             var title = trackTitle.Text;
             progress.Text = model.Track.Duration > 0
                 ? String.Format(CultureInfo.InvariantCulture, "{0:mm\\:ss} / {1:mm\\:ss}", TimeSpan.FromSeconds(position), TimeSpan.FromSeconds(model.Track.Duration))
                 : String.Format(CultureInfo.InvariantCulture, "已播放 {0:mm\\:ss}", TimeSpan.FromSeconds(position));
-            if (selected != null && selected.instrumental) { UpdateLyricsViewer(-1); overlay.SetKaraokeProgress(1); overlay.SetText(title, "纯音乐"); return; }
-            if (lyrics == null) { UpdateLyricsViewer(-1); overlay.SetKaraokeProgress(1); overlay.SetText(title, "等待歌词 · 请在桌面选择候选或导入 LRC"); return; }
-            if (!lyrics.Synced) { UpdateLyricsViewer(-1); overlay.SetKaraokeProgress(1); overlay.SetText(title, "此歌词为纯文本 · 可在桌面查看全文"); return; }
+            if (selected != null && selected.instrumental) { UpdateLyricsViewer(-1); overlay.SetKaraokeProgress(1); overlay.SetText("", title, "纯音乐"); return; }
+            if (lyrics == null) { UpdateLyricsViewer(-1); overlay.SetKaraokeProgress(1); overlay.SetText("", title, "等待歌词 · 请在桌面选择候选或导入 LRC"); return; }
+            if (!lyrics.Synced) { UpdateLyricsViewer(-1); overlay.SetKaraokeProgress(1); overlay.SetText("", title, "此歌词为纯文本 · 可在桌面查看全文"); return; }
             var index = lyrics.IndexAt(position, settings.Offset);
+            var previousLine = index > 0 ? lyrics.Lines[index - 1].Text : "";
             var currentLine = index < 0 ? title : lyrics.Lines[index].Text;
             var nextLine = index + 1 < lyrics.Lines.Count ? lyrics.Lines[index + 1].Text : "";
-            if ((model.Track.Duration > 0 && position >= model.Track.Duration) || String.IsNullOrWhiteSpace(currentLine))
+            var ended = model.Track.Duration > 0 && position >= model.Track.Duration;
+            if (ended || String.IsNullOrWhiteSpace(currentLine))
             {
                 UpdateLyricsViewer(-1);
+                if (ended && index >= 0) previousLine = lyrics.Lines[index].Text;
                 currentLine = title;
                 overlay.SetKaraokeProgress(1);
             }
@@ -966,7 +1022,7 @@ namespace LyricConnector
                 UpdateLyricsViewer(index);
                 overlay.SetKaraokeProgress(index < 0 ? 1 : lyrics.ProgressAt(index, position, model.Track.Duration, settings.Offset));
             }
-            overlay.SetText(currentLine, nextLine);
+            overlay.SetText(previousLine, currentLine, nextLine);
         }
 
         private void UpdatePlaybackControls()
