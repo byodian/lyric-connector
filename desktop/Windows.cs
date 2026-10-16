@@ -111,7 +111,7 @@ namespace LyricConnector
             increaseOffset.Width = 42;
             increaseOffset.Padding = new Thickness(0, 2, 0, 2);
             increaseOffset.Margin = new Thickness(1, 0, 1, 0);
-            var lyricsViewButton = PlaybackButton("查看歌词全文", AppleMusicGlyph());
+            var lyricsViewButton = PlaybackButton("查看歌词全文", LyricsGlyph());
             lyricsViewButton.Margin = new Thickness(8, 0, 2, 0);
             closeOverlay = PlaybackButton("隐藏悬浮歌词窗口", new TextBlock
                 { Text = "×", FontSize = 18, FontWeight = FontWeights.Medium, Foreground = offsetInk });
@@ -300,44 +300,69 @@ namespace LyricConnector
             return icon;
         }
 
-        private static Canvas AppleMusicGlyph()
+        private static Canvas LyricsGlyph()
         {
-            var icon = new Canvas { Width = 20, Height = 20, IsHitTestVisible = false };
-            var tile = new System.Windows.Shapes.Rectangle { Width = 19, Height = 19, RadiusX = 4, RadiusY = 4,
-                Fill = new LinearGradientBrush(Color.FromRgb(250, 35, 59), Color.FromRgb(151, 57, 224), 45) };
-            icon.Children.Add(tile);
+            var icon = new Canvas { Width = 24, Height = 20, IsHitTestVisible = false };
+            var ink = new SolidColorBrush(Color.FromRgb(132, 86, 186));
 
-            var ink = Brushes.White;
-            var beamGeometry = new StreamGeometry();
-            using (var context = beamGeometry.Open())
+            var bubbleGeometry = new StreamGeometry();
+            using (var context = bubbleGeometry.Open())
             {
-                context.BeginFigure(new Point(8.2, 4.2), true, true);
-                context.LineTo(new Point(15.7, 2.3), true, false);
-                context.LineTo(new Point(15.7, 4.8), true, false);
-                context.LineTo(new Point(8.2, 6.7), true, false);
+                context.BeginFigure(new Point(7.6, 3.2), false, true);
+                context.LineTo(new Point(16.4, 3.2), true, false);
+                context.ArcTo(new Point(19.2, 6.0), new Size(2.8, 2.8), 0, false, SweepDirection.Clockwise, true, false);
+                context.LineTo(new Point(19.2, 10.8), true, false);
+                context.ArcTo(new Point(16.4, 13.6), new Size(2.8, 2.8), 0, false, SweepDirection.Clockwise, true, false);
+                context.LineTo(new Point(9.2, 13.6), true, false);
+                context.BezierTo(new Point(8.0, 13.6), new Point(6.6, 14.8), new Point(5.8, 16.6), true, false);
+                context.BezierTo(new Point(5.5, 15.2), new Point(4.8, 13.2), new Point(4.8, 10.8), true, false);
+                context.LineTo(new Point(4.8, 6.0), true, false);
+                context.ArcTo(new Point(7.6, 3.2), new Size(2.8, 2.8), 0, false, SweepDirection.Clockwise, true, false);
             }
-            beamGeometry.Freeze();
-            icon.Children.Add(new System.Windows.Shapes.Path { Data = beamGeometry, Fill = ink, IsHitTestVisible = false });
+            bubbleGeometry.Freeze();
 
-            var leftStem = new System.Windows.Shapes.Rectangle { Width = 1.6, Height = 8.4, RadiusX = 0.8, RadiusY = 0.8, Fill = ink };
-            Canvas.SetLeft(leftStem, 8.2);
-            Canvas.SetTop(leftStem, 5.0);
-            icon.Children.Add(leftStem);
-            var rightStem = new System.Windows.Shapes.Rectangle { Width = 1.6, Height = 8.4, RadiusX = 0.8, RadiusY = 0.8, Fill = ink };
-            Canvas.SetLeft(rightStem, 14.1);
-            Canvas.SetTop(rightStem, 3.3);
-            icon.Children.Add(rightStem);
+            var bubble = new System.Windows.Shapes.Path
+            {
+                Data = bubbleGeometry,
+                Stroke = ink,
+                StrokeThickness = 1.4,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round,
+                Width = 24,
+                Height = 20,
+                Stretch = Stretch.None,
+                IsHitTestVisible = false
+            };
+            icon.Children.Add(bubble);
 
-            var leftNote = new System.Windows.Shapes.Ellipse { Width = 5, Height = 3.6, Fill = ink,
-                RenderTransform = new RotateTransform(-22, 2.5, 1.8), IsHitTestVisible = false };
-            Canvas.SetLeft(leftNote, 4.1);
-            Canvas.SetTop(leftNote, 12.1);
-            icon.Children.Add(leftNote);
-            var rightNote = new System.Windows.Shapes.Ellipse { Width = 5, Height = 3.6, Fill = ink,
-                RenderTransform = new RotateTransform(-22, 2.5, 1.8), IsHitTestVisible = false };
-            Canvas.SetLeft(rightNote, 10.1);
-            Canvas.SetTop(rightNote, 10.4);
-            icon.Children.Add(rightNote);
+            var quotesGeometry = new StreamGeometry();
+            using (var context = quotesGeometry.Open())
+            {
+                context.BeginFigure(new Point(9.2, 6.2), true, true);
+                context.ArcTo(new Point(11.2, 6.2), new Size(1.0, 1.0), 0, true, SweepDirection.Clockwise, true, false);
+                context.BezierTo(new Point(11.2, 7.3), new Point(10.8, 8.4), new Point(9.8, 9.3), true, false);
+                context.BezierTo(new Point(10.2, 8.5), new Point(10.5, 7.8), new Point(10.2, 7.2), true, false);
+                context.ArcTo(new Point(9.2, 6.2), new Size(1.0, 1.0), 0, false, SweepDirection.Clockwise, true, false);
+
+                context.BeginFigure(new Point(12.8, 6.2), true, true);
+                context.ArcTo(new Point(14.8, 6.2), new Size(1.0, 1.0), 0, true, SweepDirection.Clockwise, true, false);
+                context.BezierTo(new Point(14.8, 7.3), new Point(14.4, 8.4), new Point(13.4, 9.3), true, false);
+                context.BezierTo(new Point(13.8, 8.5), new Point(14.1, 7.8), new Point(13.8, 7.2), true, false);
+                context.ArcTo(new Point(12.8, 6.2), new Size(1.0, 1.0), 0, false, SweepDirection.Clockwise, true, false);
+            }
+            quotesGeometry.Freeze();
+
+            var quotes = new System.Windows.Shapes.Path
+            {
+                Data = quotesGeometry,
+                Fill = ink,
+                Width = 24,
+                Height = 20,
+                Stretch = Stretch.None,
+                IsHitTestVisible = false
+            };
+            icon.Children.Add(quotes);
 
             return icon;
         }
