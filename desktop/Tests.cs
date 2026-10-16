@@ -86,6 +86,44 @@ namespace LyricConnector
             var playerUpdate = new Packet { Entity = 0, Attribute = 0, Value = "Apple Music" };
             Check(AmsSource.ChangesPlayer(playerUpdate, "YouTube Music"), "player change triggers a fresh media snapshot");
             Check(!AmsSource.ChangesPlayer(playerUpdate, "Apple Music"), "same player name does not restart the media snapshot");
+            var netEaseRaw = new Track { Title = "让唇在无味的衣领上 笑说最爱你的气味", Artist = "陈慧娴/傻女",
+                Album = "宝丽金难忘的回忆精选", Duration = 230 };
+            bool netEaseTitleFromArtist;
+            var netEaseTrack = AmsTrackMetadata.Normalize("NetEase Music", netEaseRaw, out netEaseTitleFromArtist);
+            Check(netEaseTitleFromArtist && netEaseTrack.Title == "傻女" && netEaseTrack.Artist == "陈慧娴",
+                "NetEase composite artist metadata recovers the actual track title and artist");
+            Check(AmsTrackMetadata.IsTitleStable(netEaseTitleFromArtist, "我恨我共你是套现已完场的好戏", "只有请你的毛衣 从此每天饰演你"),
+                "NetEase lyric updates do not invalidate a stable track snapshot");
+            Check(!AmsTrackMetadata.HasTrackChanged(new Packet { Entity = 2, Attribute = 2, Value = "我恨我共你是套现已完场的好戏" },
+                netEaseTrack, "NetEase Music", netEaseTitleFromArtist), "NetEase lyric text updates do not trigger track transitions");
+            Check(AmsTrackMetadata.HasTrackChanged(new Packet { Entity = 2, Attribute = 0, Value = "陈慧娴/千千阙歌" },
+                netEaseTrack, "NetEase Music", netEaseTitleFromArtist), "a new NetEase composite artist value detects a real track change");
+            Check(!AmsTrackMetadata.HasTrackChanged(new Packet { Entity = 2, Attribute = 3, Value = "230" },
+                new Track { Title = "傻女", Artist = "陈慧娴", Album = "宝丽金难忘的回忆精选", Duration = 0 },
+                "NetEase Music", netEaseTitleFromArtist), "a newly available duration does not trigger a track transition");
+            Check(!AmsTrackMetadata.HasTrackChanged(new Track { Title = "傻女", Artist = "陈慧娴", Album = "宝丽金难忘的回忆精选", Duration = 0 },
+                true, "NetEase Music", netEaseTrack, netEaseTitleFromArtist, "NetEase Music"),
+                "an unavailable snapshot duration does not make stable metadata look changed");
+            Check(AmsTrackMetadata.HasTrackChanged(new Track { Title = "千千阙歌", Artist = "陈慧娴", Album = "宝丽金难忘的回忆精选", Duration = 230 },
+                true, "NetEase Music", netEaseTrack, netEaseTitleFromArtist, "NetEase Music"),
+                "stable composite title changes are detected even when the artist is unchanged");
+            var netEaseModel = new PlaybackModel(1000);
+            netEaseModel.Accept(new SourceUpdate { Kind = UpdateKind.Snapshot, Revision = 10, Player = "NetEase Music",
+                Track = netEaseTrack, Playback = Playback.Parse("1,1.0,45.7", 1000), TitleFromArtist = netEaseTitleFromArtist });
+            if (AmsTrackMetadata.HasTrackChanged(new Packet { Entity = 2, Attribute = 2, Value = "我恨我共你是套现已完场的好戏" },
+                netEaseModel.Track, netEaseModel.Player, netEaseTitleFromArtist))
+                netEaseModel.Accept(new SourceUpdate { Kind = UpdateKind.Transition, Revision = 11, Message = "changing" });
+            Check(netEaseModel.Ready && netEaseModel.Track.Title == "傻女",
+                "NetEase lyric notifications keep the active song and playback anchor");
+            double observedDuration;
+            Check(!AmsTrackMetadata.TryParseDuration("宝丽金难忘的回忆精选", out observedDuration) && observedDuration == 0,
+                "a nonnumeric health-check duration is ignored instead of clearing the current track");
+            Check(AmsTrackMetadata.TryParseDuration("230", out observedDuration) && observedDuration == 230,
+                "a valid health-check duration remains available");
+            Check(!AmsTrackMetadata.TryParseDuration("Infinity", out observedDuration) && observedDuration == 0,
+                "an invalid infinite health-check duration is ignored");
+            Check(!AmsTrackMetadata.HasTrackChanged(new Packet { Entity = 2, Attribute = 3, Value = "宝丽金难忘的回忆精选" },
+                netEaseTrack, "NetEase Music", netEaseTitleFromArtist), "a nonnumeric duration notification does not trigger a song transition");
             var lines = Lyrics.Parse("[ar:A]\n[offset:250]\n[00:02.50][00:04.5]same\n[00:04.500]translation\n[00:08]last");
             Check(lines.Lines.Count == 3 && lines.Lines[1].Text == "same / translation", "multiple stamps and duplicate-time translation");
             Check(lines.IndexAt(2, 0) == -1 && lines.IndexAt(2, 0.25) == 0, "file and user offsets advance lyrics");
@@ -119,6 +157,9 @@ namespace LyricConnector
             var currentColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(defaults.CurrentLineColor);
             var nextColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(defaults.NextLineColor);
             Check(currentColor != nextColor, "current and next lyric lines support distinct configurable colors");
+            var overlay = new LyricWindow(defaults);
+            Check(overlay.Title.IndexOf("桌面歌词", StringComparison.Ordinal) >= 0, "lyric window initializes with desktop lyrics title and glyph controls");
+            overlay.Close();
             Check(!Lyrics.Parse("[00:99]invalid").Synced, "invalid seconds rejected");
             foreach (var invalid in new[] { "0,,", "1,1.0,", "1,1.0,nan", "1,NaN,10", "1,1.0,Infinity", "1,1,-1" })
             {

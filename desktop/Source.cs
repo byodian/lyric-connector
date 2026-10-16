@@ -72,6 +72,82 @@ namespace LyricConnector
         public long Timestamp;
     }
 
+    internal static class AmsTrackMetadata
+    {
+        private static bool IsNetEasePlayer(string player)
+        {
+            return player == "NetEase Music" || player == "网易云音乐";
+        }
+
+        internal static Track Normalize(string player, Track track, out bool titleFromArtist)
+        {
+            titleFromArtist = false;
+            if (!IsNetEasePlayer(player)) return track;
+            var separator = track.Artist.LastIndexOf('/');
+            if (separator <= 0 || separator == track.Artist.Length - 1) return track;
+            var artist = track.Artist.Substring(0, separator).Trim();
+            var title = track.Artist.Substring(separator + 1).Trim();
+            if (artist.Length == 0 || title.Length == 0) return track;
+            titleFromArtist = true;
+            return new Track { Title = title, Artist = artist, Album = track.Album, Duration = track.Duration };
+        }
+
+        internal static bool IsTitleStable(bool titleFromArtist, string first, string second)
+        {
+            return titleFromArtist || first == second;
+        }
+
+        internal static bool HasTrackChanged(Packet packet, Track track, string player, bool titleFromArtist)
+        {
+            if (packet.Entity != 2) return false;
+            if (titleFromArtist && IsNetEasePlayer(player))
+            {
+                if (packet.Attribute == 2) return false;
+                if (packet.Attribute == 0)
+                {
+                    bool packetTitleFromArtist;
+                    var packetTrack = Normalize(player, new Track { Title = "", Artist = packet.Value,
+                        Album = track.Album, Duration = track.Duration }, out packetTitleFromArtist);
+                    return packetTitleFromArtist
+                        ? packetTrack.Artist != track.Artist || packetTrack.Title != track.Title
+                        : packet.Value != track.Artist;
+                }
+            }
+            if (packet.Attribute == 0) return packet.Value != track.Artist;
+            if (packet.Attribute == 1) return packet.Value != track.Album;
+            if (packet.Attribute == 2) return packet.Value != track.Title;
+            if (packet.Attribute == 3)
+            {
+                double duration;
+                return track.Duration > 0 && TryParseDuration(packet.Value, out duration) && Math.Abs(duration - track.Duration) > 2;
+            }
+            return false;
+        }
+
+        internal static bool HasTrackChanged(Track candidate, bool candidateTitleFromArtist, string player,
+            Track current, bool currentTitleFromArtist, string currentPlayer)
+        {
+            if (player != currentPlayer) return true;
+            if (candidate.Artist.Length > 0 && current.Artist.Length > 0 && candidate.Artist != current.Artist) return true;
+            if (candidate.Album.Length > 0 && current.Album.Length > 0 && candidate.Album != current.Album) return true;
+            if (candidateTitleFromArtist == currentTitleFromArtist && candidate.Title != current.Title) return true;
+            return candidate.Duration > 0 && current.Duration > 0 && Math.Abs(candidate.Duration - current.Duration) > 2;
+        }
+
+        internal static bool TryParseDuration(string value, out double duration)
+        {
+            double parsed;
+            if (!Double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed)
+                || Double.IsNaN(parsed) || Double.IsInfinity(parsed) || parsed <= 0)
+            {
+                duration = 0;
+                return false;
+            }
+            duration = parsed;
+            return true;
+        }
+    }
+
     internal sealed class RemoteCommandRequest
     {
         public byte Command;
@@ -107,6 +183,7 @@ namespace LyricConnector
         private bool snapshotReadStarted;
         private bool snapshotIssueLogged;
         private volatile bool connectionLost;
+        private bool stableTitleFromArtist;
         private long metadataChangedAt;
         private Track stableTrack;
         private string stablePlayer;
@@ -271,22 +348,28 @@ namespace LyricConnector
             var playback = Playback.Parse(info, Stopwatch.GetTimestamp());
             var artistAfter = await ReadAsync(attribute, 2, 0, true, cancellation);
             var titleAfter = await ReadAsync(attribute, 2, 2, false, cancellation);
-            var length = ParseDuration(duration);
-            if (title != titleAfter || artist != artistAfter || title.Length == 0
-                || !IsPositionWithinDuration(length, playback.Seconds))
+            var albumAfter = await ReadAsync(attribute, 2, 1, true, cancellation);
+            var durationAfter = await ReadAsync(attribute, 2, 3, true, cancellation);
+            var playerAfter = await ReadAsync(attribute, 0, 0, false, cancellation);
+            var length = 0.0;
+            var durationAvailable = AmsTrackMetadata.TryParseDuration(duration, out length);
+            double lengthAfter;
+            var durationAvailableAfter = AmsTrackMetadata.TryParseDuration(durationAfter, out lengthAfter);
+            var artistStable = artist == artistAfter;
+            var albumStable = album == albumAfter;
+            var durationStable = durationAvailable == durationAvailableAfter
+                && (!durationAvailable || Math.Abs(length - lengthAfter) <= 2);
+            var playerStable = player == playerAfter;
+            var rawTrack = new Track { Title = title, Artist = artist, Album = album, Duration = length };
+            bool titleFromArtist;
+            var track = AmsTrackMetadata.Normalize(player, rawTrack, out titleFromArtist);
+            var titleStable = AmsTrackMetadata.IsTitleStable(titleFromArtist, title, titleAfter);
+            var hasTitle = track.Title.Length > 0;
+            var positionValid = IsPositionWithinDuration(length, playback.Seconds);
+            if (!titleStable || !artistStable || !albumStable || !durationStable || !playerStable || !hasTitle || !positionValid)
                 return null;
             return new SourceUpdate { Kind = UpdateKind.Snapshot, Revision = revision, Player = player,
-                Track = new Track { Title = title, Artist = artist, Album = album, Duration = length }, Playback = playback };
-        }
-
-        private bool ChangesTrack(Packet packet, Track track)
-        {
-            if (packet.Entity != 2) return false;
-            if (packet.Attribute == 0) return packet.Value != track.Artist;
-            if (packet.Attribute == 1) return packet.Value != track.Album;
-            if (packet.Attribute == 2) return packet.Value != track.Title;
-            if (packet.Attribute == 3) return Math.Abs(ParseDuration(packet.Value) - track.Duration) > 2;
-            return false;
+                Track = track, Playback = playback, TitleFromArtist = titleFromArtist };
         }
 
         internal static bool ChangesPlayer(Packet packet, string player)
@@ -392,8 +475,12 @@ namespace LyricConnector
                         while (packets.TryDequeue(out packet))
                         {
                             if (packet.Truncated) packet.Value = await ReadAsync(attribute, packet.Entity, packet.Attribute, false, cancellation);
-                            if (packet.Entity == 2 && (dirty || ChangesTrack(packet, stableTrack))) Transition(packet.Timestamp, "正在切换歌曲");
-                            else if (ChangesPlayer(packet, stablePlayer)) Transition(packet.Timestamp, "正在切换播放器");
+                            var trackChanged = packet.Entity == 2 && !dirty
+                                && AmsTrackMetadata.HasTrackChanged(packet, stableTrack, stablePlayer, stableTitleFromArtist);
+                            if (packet.Entity == 2 && (dirty || trackChanged))
+                                Transition(packet.Timestamp, "正在切换歌曲");
+                            else if (ChangesPlayer(packet, stablePlayer))
+                                Transition(packet.Timestamp, "正在切换播放器");
                             else if (packet.Entity == 0 && packet.Attribute == 1 && !dirty)
                                 publish(new SourceUpdate { Kind = UpdateKind.Playback, Revision = revision, Playback = Playback.Parse(packet.Value, packet.Timestamp) });
                         }
@@ -415,8 +502,11 @@ namespace LyricConnector
                             while (packets.TryDequeue(out packet))
                             {
                                 if (packet.Truncated) packet.Value = await ReadAsync(attribute, packet.Entity, packet.Attribute, false, cancellation);
-                                if (snapshot != null && ChangesTrack(packet, snapshot.Track)) conflicts = true;
-                                if (snapshot != null && ChangesPlayer(packet, snapshot.Player)) conflicts = true;
+                                if (snapshot != null && AmsTrackMetadata.HasTrackChanged(packet, snapshot.Track,
+                                    snapshot.Player, snapshot.TitleFromArtist))
+                                    conflicts = true;
+                                if (snapshot != null && ChangesPlayer(packet, snapshot.Player))
+                                    conflicts = true;
                                 if (snapshot != null && packet.Entity == 0 && packet.Attribute == 1)
                                 {
                                     var latest = Playback.Parse(packet.Value, packet.Timestamp);
@@ -428,6 +518,7 @@ namespace LyricConnector
                             {
                                 stableTrack = snapshot.Track;
                                 stablePlayer = snapshot.Player;
+                                stableTitleFromArtist = snapshot.TitleFromArtist;
                                 dirty = false;
                                 waitingPublished = false;
                                 snapshotReadStarted = false;
@@ -439,17 +530,15 @@ namespace LyricConnector
                         if (!dirty && (now - healthAt) / (double)Stopwatch.Frequency >= 15)
                         {
                             healthAt = now;
-                            var title = await ReadAsync(attribute, 2, 2, false, cancellation);
-                            var player = await ReadAsync(attribute, 0, 0, false, cancellation);
-                            var duration = ParseDuration(await ReadAsync(attribute, 2, 3, true, cancellation));
-                            if (title != stableTrack.Title) Transition(now, "正在切换歌曲");
-                            else if (player != stablePlayer) Transition(now, "正在切换播放器");
-                            else if (duration > 0 && (stableTrack.Duration <= 0 || Math.Abs(duration - stableTrack.Duration) > 2))
-                                Transition(now, "正在校准歌曲信息");
-                            else
+                            var health = await SnapshotAsync(attribute, cancellation);
+                            if (health != null && health.Player != stablePlayer)
+                                Transition(now, "正在切换播放器");
+                            else if (health != null && AmsTrackMetadata.HasTrackChanged(health.Track, health.TitleFromArtist,
+                                health.Player, stableTrack, stableTitleFromArtist, stablePlayer))
+                                Transition(now, "正在切换歌曲");
+                            else if (health != null)
                             {
-                                var value = await ReadAsync(attribute, 0, 1, false, cancellation);
-                                publish(new SourceUpdate { Kind = UpdateKind.Playback, Revision = revision, Playback = Playback.Parse(value, Stopwatch.GetTimestamp()) });
+                                publish(new SourceUpdate { Kind = UpdateKind.Playback, Revision = revision, Playback = health.Playback });
                             }
                         }
                     }
@@ -460,7 +549,8 @@ namespace LyricConnector
                             Console.WriteLine("AMS_INVALID_STATE: " + error.Message);
                             snapshotIssueLogged = true;
                         }
-                        Transition(Stopwatch.GetTimestamp(), "等待手机提供有效进度");
+                        if (dirty || stableTrack == null)
+                            Transition(Stopwatch.GetTimestamp(), "等待手机提供有效进度");
                     }
                     await Task.Delay(80, cancellation).ConfigureAwait(false);
                 }

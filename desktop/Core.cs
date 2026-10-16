@@ -59,6 +59,7 @@ namespace LyricConnector
         public Playback Playback { get; set; }
         public string Player { get; set; }
         public string Message { get; set; }
+        public bool TitleFromArtist { get; set; }
     }
 
     public sealed class PlaybackModel
@@ -88,6 +89,7 @@ namespace LyricConnector
             {
                 Track = null;
                 anchor = null;
+                Player = "";
                 Status = update.Message;
                 return previousKey.Length > 0;
             }
