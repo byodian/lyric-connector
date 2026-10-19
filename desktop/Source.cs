@@ -87,9 +87,15 @@ namespace LyricConnector
                 || player == "QQ音乐";
         }
 
+        private static bool IsKugouPlayer(string player)
+        {
+            return String.Equals(player, "Kugou Music", StringComparison.OrdinalIgnoreCase)
+                || player == "酷狗音乐";
+        }
+
         private static bool UsesCompositeArtistTitleMetadata(string player)
         {
-            return IsNetEasePlayer(player) || IsQQMusicPlayer(player);
+            return IsNetEasePlayer(player) || IsQQMusicPlayer(player) || IsKugouPlayer(player);
         }
 
         internal static Track Normalize(string player, Track track, out bool titleFromArtist)
@@ -97,12 +103,15 @@ namespace LyricConnector
             titleFromArtist = false;
             if (!UsesCompositeArtistTitleMetadata(player)) return track;
             var qqMusic = IsQQMusicPlayer(player);
-            var separator = track.Artist.LastIndexOf(qqMusic ? '—' : '/');
+            var kugou = IsKugouPlayer(player);
+            var separatorText = kugou ? " - " : "";
+            var separator = kugou ? track.Artist.LastIndexOf(separatorText, StringComparison.Ordinal)
+                : track.Artist.LastIndexOf(qqMusic ? '—' : '/');
             if (separator <= 0 || separator == track.Artist.Length - 1) return track;
             var first = track.Artist.Substring(0, separator).Trim();
-            var second = track.Artist.Substring(separator + 1).Trim();
-            var artist = qqMusic ? second : first;
-            var title = qqMusic ? first : second;
+            var second = track.Artist.Substring(separator + (kugou ? separatorText.Length : 1)).Trim();
+            var artist = qqMusic || kugou ? second : first;
+            var title = qqMusic || kugou ? first : second;
             if (artist.Length == 0 || title.Length == 0) return track;
             titleFromArtist = true;
             return new Track { Title = title, Artist = artist, Album = track.Album, Duration = track.Duration };
