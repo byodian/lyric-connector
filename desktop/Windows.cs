@@ -10,6 +10,7 @@ using System.Windows.Automation;
 using System.Web.Script.Serialization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -37,6 +38,7 @@ namespace LyricConnector
         private readonly Button playPause;
         private readonly Button nextTrack;
         private readonly Button closeOverlay;
+        private readonly Thumb resizeHandle;
         private readonly StackPanel controls;
         private readonly Border progressTrack;
         private readonly Border progressFill;
@@ -65,7 +67,7 @@ namespace LyricConnector
             AllowsTransparency = true;
             Background = Brushes.Transparent;
             ShowInTaskbar = false;
-            ResizeMode = ResizeMode.CanResizeWithGrip;
+            ResizeMode = ResizeMode.NoResize;
             Width = settings.Width;
             Height = Math.Max(136, settings.FontSize * 3 + 32);
             MinWidth = 360;
@@ -162,6 +164,25 @@ namespace LyricConnector
             closeOverlay.Opacity = 0;
             closeOverlay.IsHitTestVisible = false;
             content.Children.Add(closeOverlay);
+            resizeHandle = new Thumb
+            {
+                Width = 18,
+                Height = 18,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, 3, 3),
+                Cursor = System.Windows.Input.Cursors.SizeNWSE,
+                Opacity = 0,
+                IsHitTestVisible = false,
+                ToolTip = "拖动以调整窗口大小",
+                Template = ResizeHandleTemplate()
+            };
+            resizeHandle.DragDelta += delegate(object sender, DragDeltaEventArgs args)
+            {
+                Width = Math.Max(MinWidth, Width + args.HorizontalChange);
+                Height = Math.Max(MinHeight, Height + args.VerticalChange);
+            };
+            content.Children.Add(resizeHandle);
             surface.Child = content;
             Content = surface;
             surface.MouseEnter += delegate { SetHoverState(true); };
@@ -270,6 +291,40 @@ namespace LyricConnector
             template.Triggers.Add(disabled);
             button.Template = template;
             return button;
+        }
+
+        private static ControlTemplate ResizeHandleTemplate()
+        {
+            var geometry = new StreamGeometry();
+            using (var context = geometry.Open())
+            {
+                context.BeginFigure(new Point(3, 13), false, false);
+                context.LineTo(new Point(13, 3), true, false);
+                context.BeginFigure(new Point(8, 15), false, false);
+                context.LineTo(new Point(15, 8), true, false);
+                context.BeginFigure(new Point(13, 15), false, false);
+                context.LineTo(new Point(15, 13), true, false);
+            }
+            geometry.Freeze();
+
+            var template = new ControlTemplate(typeof(Thumb));
+            var hitArea = new FrameworkElementFactory(typeof(Border));
+            hitArea.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+            var glyph = new FrameworkElementFactory(typeof(System.Windows.Shapes.Path));
+            glyph.SetValue(FrameworkElement.WidthProperty, 14.0);
+            glyph.SetValue(FrameworkElement.HeightProperty, 14.0);
+            glyph.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            glyph.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            glyph.SetValue(System.Windows.Shapes.Path.DataProperty, geometry);
+            glyph.SetValue(System.Windows.Shapes.Path.StrokeProperty, new SolidColorBrush(Color.FromRgb(248, 244, 255)));
+            glyph.SetValue(System.Windows.Shapes.Path.StrokeThicknessProperty, 1.3);
+            glyph.SetValue(System.Windows.Shapes.Path.StrokeStartLineCapProperty, PenLineCap.Round);
+            glyph.SetValue(System.Windows.Shapes.Path.StrokeEndLineCapProperty, PenLineCap.Round);
+            glyph.SetValue(System.Windows.Shapes.Path.StrokeLineJoinProperty, PenLineJoin.Round);
+            glyph.SetValue(System.Windows.Shapes.Path.StretchProperty, Stretch.Fill);
+            hitArea.AppendChild(glyph);
+            template.VisualTree = hitArea;
+            return template;
         }
 
         private static Canvas PlaybackGlyph(byte command)
@@ -411,8 +466,11 @@ namespace LyricConnector
 
         private void SetHoverState(bool hovered)
         {
-            SetControlsVisible(hovered);
-            UpdatePanelBackground(hovered);
+            var interactiveHover = hovered && !through;
+            SetControlsVisible(interactiveHover);
+            resizeHandle.Opacity = interactiveHover ? 1 : 0;
+            resizeHandle.IsHitTestVisible = interactiveHover;
+            UpdatePanelBackground(interactiveHover);
         }
 
         private void UpdatePanelBackground(bool hovered)
@@ -464,7 +522,7 @@ namespace LyricConnector
                 Top = Math.Max(SystemParameters.WorkArea.Top, bottom - Height);
             }
             backgroundOpacity = settings.BackgroundOpacity;
-            UpdatePanelBackground(surface.IsMouseOver);
+            SetHoverState(surface.IsMouseOver);
             var window = new WindowInteropHelper(this).Handle;
             if (window != IntPtr.Zero)
             {
@@ -492,10 +550,17 @@ namespace LyricConnector
         private readonly TextBlock artist = new TextBlock { TextWrapping = TextWrapping.Wrap };
         private readonly TextBlock progress = new TextBlock();
         private readonly TextBlock lyricStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        private readonly TextBlock displayStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
         private readonly TextBox searchTitle = new TextBox();
         private readonly TextBox searchArtist = new TextBox();
         private readonly ListBox candidates = new ListBox { Height = 112 };
+        private readonly TextBlock candidateEmpty = new TextBlock { TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
         private readonly Button overlayVisibility;
+        private readonly Button musicTab;
+        private readonly Button displayTab;
+        private readonly ScrollViewer musicPage;
+        private readonly ScrollViewer displayPage;
         private readonly CheckBox clickThrough = new CheckBox { Content = "鼠标穿透（Ctrl + Alt + L 切换）" };
         private readonly TextBlock offsetLabel = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 76, TextAlignment = TextAlignment.Center };
         private CancellationTokenSource sourceCancellation;
@@ -592,68 +657,260 @@ namespace LyricConnector
             {
                 if (args.Button == System.Windows.Forms.MouseButtons.Left) ShowControlWindow();
             };
-            Width = 520;
-            Height = 810;
-            MinWidth = 440;
-            MinHeight = 580;
+            Width = 700;
+            Height = 790;
+            MinWidth = 620;
+            MinHeight = 620;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Background = new SolidColorBrush(Color.FromRgb(245, 242, 248));
-            Foreground = new SolidColorBrush(Color.FromRgb(39, 31, 57));
+            Background = new SolidColorBrush(Color.FromRgb(245, 243, 248));
+            Foreground = new SolidColorBrush(Color.FromRgb(40, 34, 52));
             FontFamily = new FontFamily("Microsoft YaHei UI");
             FontSize = 13;
-            var root = new StackPanel { Margin = new Thickness(24, 20, 24, 24) };
-            root.Children.Add(new TextBlock { Text = "LYRIC CONNECTOR", FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(120, 83, 128)) });
-            root.Children.Add(new TextBlock { Text = "音乐在手机，歌词在桌面", FontSize = 22, Margin = new Thickness(0, 6, 0, 18) });
-            root.Children.Add(Row(devices, Button("刷新", async delegate { await RefreshDevicesAsync(false); }), Button("连接", async delegate { await ConnectAsync(); })));
-            sourceStatus.Margin = new Thickness(0, 9, 0, 16);
-            root.Children.Add(sourceStatus);
-            root.Children.Add(trackTitle);
-            artist.Margin = new Thickness(0, 4, 0, 6);
-            root.Children.Add(artist);
-            root.Children.Add(progress);
-            lyricStatus.Margin = new Thickness(0, 10, 0, 14);
-            root.Children.Add(lyricStatus);
-            root.Children.Add(Label("歌词匹配 · 视频标题与频道名可在这里修正"));
-            searchTitle.Margin = new Thickness(0, 5, 0, 5);
+            var root = new Grid { Margin = new Thickness(24, 20, 24, 20) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            var header = new Grid { Margin = new Thickness(0, 0, 0, 16) };
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var mark = new Border { Width = 38, Height = 38, CornerRadius = new CornerRadius(11), Background = new SolidColorBrush(Color.FromRgb(113, 82, 142)),
+                Child = new TextBlock { Text = "♫", FontSize = 21, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, -2, 0, 0) } };
+            header.Children.Add(mark);
+            var brand = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
+            brand.Children.Add(new TextBlock { Text = "Lyric Connector", FontSize = 18, FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(40, 34, 52)) });
+            brand.Children.Add(new TextBlock { Text = "音乐在手机，歌词在桌面", FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(119, 110, 130)), Margin = new Thickness(0, 1, 0, 0) });
+            Grid.SetColumn(brand, 1);
+            header.Children.Add(brand);
+            Grid.SetRow(header, 0);
+            root.Children.Add(header);
+
+            trackTitle.FontSize = 19;
+            trackTitle.FontWeight = FontWeights.Medium;
+            trackTitle.Foreground = Brushes.White;
+            trackTitle.TextTrimming = TextTrimming.CharacterEllipsis;
+            trackTitle.TextWrapping = TextWrapping.NoWrap;
+            artist.FontSize = 12;
+            artist.Foreground = new SolidColorBrush(Color.FromRgb(207, 196, 218));
+            artist.TextTrimming = TextTrimming.CharacterEllipsis;
+            artist.TextWrapping = TextWrapping.NoWrap;
+            progress.FontSize = 11;
+            progress.Foreground = new SolidColorBrush(Color.FromRgb(192, 180, 203));
+            progress.HorizontalAlignment = HorizontalAlignment.Right;
+            progress.VerticalAlignment = VerticalAlignment.Center;
+            var trackInfo = new Grid();
+            trackInfo.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            trackInfo.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            trackInfo.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            trackInfo.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            trackInfo.Children.Add(trackTitle);
+            Grid.SetRow(artist, 1);
+            trackInfo.Children.Add(artist);
+            Grid.SetColumn(progress, 1);
+            Grid.SetRow(progress, 1);
+            progress.Margin = new Thickness(16, 0, 0, 0);
+            trackInfo.Children.Add(progress);
+            var trackStrip = new Border { Background = new SolidColorBrush(Color.FromRgb(48, 39, 59)), CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(18, 14, 18, 14), Margin = new Thickness(0, 0, 0, 14), Child = trackInfo };
+            Grid.SetRow(trackStrip, 1);
+            root.Children.Add(trackStrip);
+
+            musicTab = Button("音乐与歌词", delegate { SelectSettingsPage(false); });
+            displayTab = Button("悬浮窗口", delegate { SelectSettingsPage(true); });
+            musicTab.MinWidth = displayTab.MinWidth = 116;
+            musicTab.Margin = new Thickness(0, 0, 8, 0);
+            displayTab.Margin = new Thickness(0);
+            var tabs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+            tabs.Children.Add(musicTab);
+            tabs.Children.Add(displayTab);
+            Grid.SetRow(tabs, 2);
+            root.Children.Add(tabs);
+
+            musicPage = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+            displayPage = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+            var musicContent = new StackPanel { Margin = new Thickness(0, 2, 8, 4) };
+            musicContent.Children.Add(SectionHeading("iPhone 连接", "选择已配对设备，读取当前播放器状态。"));
+            var deviceGrid = new Grid();
+            deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            deviceGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            deviceGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            StyleField(devices);
+            devices.Margin = new Thickness(0, 0, 8, 0);
+            var refreshDevices = Button("刷新", async delegate { await RefreshDevicesAsync(false); });
+            var connect = PrimaryButton("连接", async delegate { await ConnectAsync(); });
+            refreshDevices.MinWidth = 78;
+            connect.MinWidth = 82;
+            Grid.SetColumn(devices, 0);
+            deviceGrid.Children.Add(devices);
+            Grid.SetColumn(refreshDevices, 1);
+            deviceGrid.Children.Add(refreshDevices);
+            Grid.SetColumn(connect, 2);
+            deviceGrid.Children.Add(connect);
+            sourceStatus.Margin = new Thickness(1, 10, 1, 0);
+            sourceStatus.FontSize = 12;
+            sourceStatus.Foreground = new SolidColorBrush(Color.FromRgb(107, 99, 119));
+            Grid.SetRow(sourceStatus, 1);
+            Grid.SetColumnSpan(sourceStatus, 3);
+            deviceGrid.Children.Add(sourceStatus);
+            musicContent.Children.Add(new Border { Background = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(229, 224, 235)),
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(14), Child = deviceGrid,
+                Margin = new Thickness(0, 0, 0, 18) });
+
+            musicContent.Children.Add(SectionHeading("歌曲与歌词", "可修正视频标题或歌手，再搜索同步歌词。"));
             searchTitle.ToolTip = "歌曲名称";
-            searchArtist.ToolTip = "歌手名称；可留空以扩大检索";
-            root.Children.Add(searchTitle);
-            root.Children.Add(searchArtist);
-            root.Children.Add(Row(Button("搜索候选", async delegate { await FindLyricsAsync(true, searchTitle.Text, searchArtist.Text, false); }), Button("导入 LRC", delegate { Import(); })));
-            root.Children.Add(candidates);
-            root.Children.Add(Row(Button("使用所选歌词", delegate { Choose(); }), Button("查看歌词文本", delegate { ShowText(); })));
-            root.Children.Add(Label("悬浮窗口"));
-            root.Children.Add(Row(new TextBlock { Text = "悬浮歌词窗口", VerticalAlignment = VerticalAlignment.Center }, overlayVisibility));
-            var font = new ComboBox { IsEditable = true, Width = 226, Text = settings.Font };
+            searchArtist.ToolTip = "歌手名称；留空可扩大搜索范围";
+            StyleField(searchTitle);
+            StyleField(searchArtist);
+            var searchFields = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            searchFields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            searchFields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var titleField = Field("歌曲名", searchTitle);
+            titleField.Margin = new Thickness(0, 0, 10, 0);
+            var artistField = Field("歌手", searchArtist);
+            Grid.SetColumn(titleField, 0);
+            Grid.SetColumn(artistField, 1);
+            searchFields.Children.Add(titleField);
+            searchFields.Children.Add(artistField);
+            musicContent.Children.Add(searchFields);
+            var searchActions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+            var search = PrimaryButton("搜索候选", async delegate { await FindLyricsAsync(true, searchTitle.Text, searchArtist.Text, false); });
+            search.Margin = new Thickness(0, 0, 8, 0);
+            searchActions.Children.Add(search);
+            searchActions.Children.Add(Button("导入 LRC", delegate { Import(); }));
+            musicContent.Children.Add(searchActions);
+            candidates.Height = Double.NaN;
+            candidates.Margin = new Thickness(0);
+            candidates.Background = Brushes.White;
+            candidates.BorderBrush = new SolidColorBrush(Color.FromRgb(218, 211, 226));
+            candidates.BorderThickness = new Thickness(1);
+            var candidateText = new FrameworkElementFactory(typeof(TextBlock));
+            candidateText.SetBinding(TextBlock.TextProperty, new Binding());
+            candidateText.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
+            candidateText.SetValue(TextBlock.MarginProperty, new Thickness(10, 8, 10, 8));
+            candidates.ItemTemplate = new DataTemplate(typeof(LyricMatch)) { VisualTree = candidateText };
+            var candidateStyle = new Style(typeof(ListBoxItem));
+            candidateStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+            candidateStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0, 0, 0, 1)));
+            candidateStyle.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(238, 234, 242))));
+            var selectedCandidate = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
+            selectedCandidate.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Color.FromRgb(241, 235, 247))));
+            candidateStyle.Triggers.Add(selectedCandidate);
+            candidates.ItemContainerStyle = candidateStyle;
+            candidateEmpty.Text = "搜索候选后，匹配版本会显示在这里。";
+            candidateEmpty.FontSize = 12;
+            candidateEmpty.Foreground = new SolidColorBrush(Color.FromRgb(145, 136, 157));
+            candidateEmpty.Margin = new Thickness(18);
+            var candidatePanel = new Grid { Height = 154, Margin = new Thickness(0, 0, 0, 10) };
+            candidatePanel.Children.Add(candidates);
+            candidatePanel.Children.Add(candidateEmpty);
+            musicContent.Children.Add(candidatePanel);
+            var candidateActions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+            var choose = PrimaryButton("使用所选歌词", delegate { Choose(); });
+            choose.Margin = new Thickness(0, 0, 8, 0);
+            candidateActions.Children.Add(choose);
+            candidateActions.Children.Add(Button("查看歌词文本", delegate { ShowText(); }));
+            musicContent.Children.Add(candidateActions);
+            lyricStatus.Margin = new Thickness(1, 7, 1, 8);
+            lyricStatus.FontSize = 12;
+            lyricStatus.Foreground = new SolidColorBrush(Color.FromRgb(107, 99, 119));
+            musicContent.Children.Add(lyricStatus);
+            musicPage.Content = musicContent;
+
+            var displayContent = new StackPanel { Margin = new Thickness(0, 2, 8, 4) };
+            displayContent.Children.Add(SectionHeading("悬浮歌词", "调整桌面歌词的外观和操作方式。"));
+            overlayVisibility.MinWidth = 100;
+            overlayVisibility.HorizontalAlignment = HorizontalAlignment.Right;
+            overlayVisibility.Margin = new Thickness(8, 0, 0, 0);
+            var visibilityText = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            visibilityText.Children.Add(new TextBlock { Text = "桌面歌词窗口", FontSize = 14, FontWeight = FontWeights.Medium });
+            visibilityText.Children.Add(new TextBlock { Text = "可随时从托盘菜单重新显示", FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(119, 110, 130)), Margin = new Thickness(0, 3, 0, 0) });
+            var visibilityRow = new Grid();
+            visibilityRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            visibilityRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(overlayVisibility, 1);
+            visibilityRow.Children.Add(visibilityText);
+            visibilityRow.Children.Add(overlayVisibility);
+            displayContent.Children.Add(new Border { Background = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(229, 224, 235)),
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(14), Child = visibilityRow,
+                Margin = new Thickness(0, 0, 0, 16) });
+
+            var font = new ComboBox { IsEditable = true, Width = 240, Text = settings.Font };
             foreach (var name in new[] { "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", "SimHei", "KaiTi" }) font.Items.Add(name);
             font.LostKeyboardFocus += delegate { if (font.Text.Trim().Length > 0) { settings.Font = font.Text.Trim(); overlay.Apply(settings); } };
-            root.Children.Add(Row(new TextBlock { Text = "字体", VerticalAlignment = VerticalAlignment.Center }, font));
-            var size = new Slider { Minimum = 16, Maximum = 56, Value = settings.FontSize, Width = 245, TickFrequency = 1, IsSnapToTickEnabled = true };
+            StyleField(font);
+            var typeSection = new StackPanel { Margin = new Thickness(0, 0, 0, 16) };
+            typeSection.Children.Add(SectionHeading("文字样式", "悬浮歌词会立即跟随这些设置。"));
+            typeSection.Children.Add(SettingRow("字体", font));
+            var size = new Slider { Minimum = 16, Maximum = 56, Value = settings.FontSize, Width = 260, TickFrequency = 1, IsSnapToTickEnabled = true };
+            var sizeValue = new TextBlock { Text = settings.FontSize.ToString("0", CultureInfo.InvariantCulture), Width = 32,
+                TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Color.FromRgb(107, 99, 119)) };
             size.ValueChanged += delegate { settings.FontSize = size.Value; overlay.Apply(settings); };
-            root.Children.Add(Row(new TextBlock { Text = "字号", VerticalAlignment = VerticalAlignment.Center }, size));
-            var opacity = new Slider { Minimum = 0, Maximum = 1, Value = settings.BackgroundOpacity, Width = 245 };
-            opacity.ValueChanged += delegate { settings.BackgroundOpacity = opacity.Value; overlay.Apply(settings); };
-            root.Children.Add(Row(new TextBlock { Text = "背景透明度", VerticalAlignment = VerticalAlignment.Center }, opacity));
+            size.ValueChanged += delegate { sizeValue.Text = size.Value.ToString("0", CultureInfo.InvariantCulture); };
+            var sizeControl = new StackPanel { Orientation = Orientation.Horizontal };
+            sizeControl.Children.Add(size);
+            sizeControl.Children.Add(sizeValue);
+            typeSection.Children.Add(SettingRow("字号", sizeControl));
+            displayContent.Children.Add(typeSection);
+
             var currentColor = new TextBox { Text = settings.CurrentLineColor, Width = 86 };
             var nextColor = new TextBox { Text = settings.NextLineColor, Width = 86 };
-            root.Children.Add(Row(new TextBlock { Text = "当前行颜色", VerticalAlignment = VerticalAlignment.Center }, currentColor,
-                Button("应用", delegate { ApplyTextColor(currentColor, true); })));
-            root.Children.Add(ColorPalette(currentColor, true));
-            root.Children.Add(Row(new TextBlock { Text = "下一行颜色", VerticalAlignment = VerticalAlignment.Center }, nextColor,
-                Button("应用", delegate { ApplyTextColor(nextColor, false); })));
-            root.Children.Add(ColorPalette(nextColor, false));
-            var topmost = new CheckBox { Content = "歌词置顶", IsChecked = settings.Topmost, Margin = new Thickness(0, 7, 12, 7) };
+            StyleField(currentColor);
+            StyleField(nextColor);
+            displayContent.Children.Add(SectionHeading("歌词颜色", "当前行随播放进度填色，前后行使用辅助色。"));
+            displayContent.Children.Add(ColorSetting("当前行", currentColor, true));
+            displayContent.Children.Add(ColorSetting("前后行", nextColor, false));
+            displayStatus.FontSize = 11;
+            displayStatus.Foreground = new SolidColorBrush(Color.FromRgb(107, 99, 119));
+            displayStatus.Margin = new Thickness(1, 4, 1, 10);
+            displayStatus.Visibility = Visibility.Collapsed;
+            displayContent.Children.Add(displayStatus);
+
+            var opacity = new Slider { Minimum = 0, Maximum = 1, Value = settings.BackgroundOpacity, Width = 270, TickFrequency = 0.1 };
+            var opacityValue = new TextBlock { Text = Math.Round(settings.BackgroundOpacity * 100).ToString(CultureInfo.InvariantCulture) + "%", Width = 42,
+                TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Color.FromRgb(107, 99, 119)) };
+            opacity.ValueChanged += delegate { settings.BackgroundOpacity = opacity.Value; overlay.Apply(settings); };
+            opacity.ValueChanged += delegate { opacityValue.Text = Math.Round(opacity.Value * 100).ToString(CultureInfo.InvariantCulture) + "%"; };
+            var opacityControl = new StackPanel { Orientation = Orientation.Horizontal };
+            opacityControl.Children.Add(opacity);
+            opacityControl.Children.Add(opacityValue);
+            displayContent.Children.Add(SectionHeading("背景与交互", "关闭鼠标穿透并悬停时，背景会暂时提高到 85%，方便操作按钮。"));
+            displayContent.Children.Add(SettingRow("默认背景", opacityControl));
+            var topmost = new CheckBox { Content = "歌词窗口置顶", IsChecked = settings.Topmost, Margin = new Thickness(0, 8, 18, 8) };
             topmost.Click += delegate { settings.Topmost = topmost.IsChecked == true; overlay.Apply(settings); };
             clickThrough.IsChecked = settings.ClickThrough;
+            clickThrough.Margin = new Thickness(0, 8, 0, 8);
             clickThrough.Click += delegate { settings.ClickThrough = clickThrough.IsChecked == true; overlay.Apply(settings); };
-            root.Children.Add(topmost);
-            root.Children.Add(clickThrough);
-            root.Children.Add(Row(new TextBlock { Text = "歌词提前", VerticalAlignment = VerticalAlignment.Center },
-                Button("− 0.25s", delegate { settings.Offset -= 0.25; UpdateOffset(); }), offsetLabel,
-                Button("+ 0.25s", delegate { settings.Offset += 0.25; UpdateOffset(); }), Button("归零", delegate { settings.Offset = 0; UpdateOffset(); })));
-            root.Children.Add(new TextBlock { Text = "正值让歌词提前。未穿透时可拖动歌词窗口，右下角可调整大小。关闭控制窗口会隐藏到系统托盘，点击托盘图标可重新打开；右键托盘图标可退出程序。", TextWrapping = TextWrapping.Wrap,
-                Foreground = new SolidColorBrush(Color.FromRgb(112, 100, 128)), Margin = new Thickness(0, 7, 0, 0), FontSize = 11 });
-            Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            var interactionOptions = new WrapPanel();
+            interactionOptions.Children.Add(topmost);
+            interactionOptions.Children.Add(clickThrough);
+            displayContent.Children.Add(interactionOptions);
+            var offsetButtons = new StackPanel { Orientation = Orientation.Horizontal };
+            offsetButtons.Children.Add(Button("− 0.25 秒", delegate { settings.Offset -= 0.25; UpdateOffset(); }));
+            offsetButtons.Children.Add(offsetLabel);
+            offsetButtons.Children.Add(Button("+ 0.25 秒", delegate { settings.Offset += 0.25; UpdateOffset(); }));
+            var resetOffset = Button("归零", delegate { settings.Offset = 0; UpdateOffset(); });
+            resetOffset.Margin = new Thickness(8, 0, 0, 0);
+            offsetButtons.Children.Add(resetOffset);
+            displayContent.Children.Add(SectionHeading("歌词提前量", "正值让歌词更早显示。"));
+            displayContent.Children.Add(SettingRow("时间调整", offsetButtons));
+            displayContent.Children.Add(new TextBlock { Text = "鼠标穿透开启时，悬浮窗不接收点击。按 Ctrl + Alt + L 可快速切换；关闭控制窗口后，程序会留在系统托盘。",
+                TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(119, 110, 130)), Margin = new Thickness(1, 12, 1, 10), FontSize = 11 });
+            displayPage.Content = displayContent;
+
+            var pages = new Grid();
+            pages.Children.Add(musicPage);
+            pages.Children.Add(displayPage);
+            Grid.SetRow(pages, 3);
+            root.Children.Add(pages);
+            Content = root;
+            SelectSettingsPage(false);
             UpdateOffset();
             ticker = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             ticker.Tick += delegate { Render(); };
@@ -731,24 +988,97 @@ namespace LyricConnector
             Close();
         }
 
-        private static TextBlock Label(string text) { return new TextBlock { Text = text, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 9, 0, 7) }; }
-        private static StackPanel Row(params UIElement[] elements)
+        private void SelectSettingsPage(bool showDisplay)
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 5, 0, 5) };
-            foreach (var element in elements)
-            {
-                ((FrameworkElement)element).Margin = new Thickness(0, 0, 8, 0);
-                row.Children.Add(element);
-            }
+            musicPage.Visibility = showDisplay ? Visibility.Collapsed : Visibility.Visible;
+            displayPage.Visibility = showDisplay ? Visibility.Visible : Visibility.Collapsed;
+            StyleTab(musicTab, !showDisplay);
+            StyleTab(displayTab, showDisplay);
+        }
+
+        private static void StyleTab(Button button, bool selected)
+        {
+            button.Background = Brushes.Transparent;
+            button.Foreground = new SolidColorBrush(selected ? Color.FromRgb(93, 61, 122) : Color.FromRgb(113, 105, 124));
+            button.BorderBrush = new SolidColorBrush(selected ? Color.FromRgb(113, 82, 142) : Color.FromRgb(245, 243, 248));
+            button.BorderThickness = new Thickness(0, 0, 0, selected ? 2 : 0);
+            button.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
+        }
+
+        private static StackPanel SectionHeading(string title, string detail)
+        {
+            var heading = new StackPanel { Margin = new Thickness(0, 0, 0, 9) };
+            heading.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(40, 34, 52)) });
+            if (!String.IsNullOrEmpty(detail))
+                heading.Children.Add(new TextBlock { Text = detail, FontSize = 11, TextWrapping = TextWrapping.Wrap,
+                    Foreground = new SolidColorBrush(Color.FromRgb(119, 110, 130)), Margin = new Thickness(0, 2, 0, 0) });
+            return heading;
+        }
+
+        private static StackPanel Field(string label, Control control)
+        {
+            var field = new StackPanel();
+            field.Children.Add(new TextBlock { Text = label, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(107, 99, 119)),
+                Margin = new Thickness(1, 0, 0, 5) });
+            field.Children.Add(control);
+            return field;
+        }
+
+        private static Grid SettingRow(string label, UIElement control)
+        {
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(112) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.Children.Add(new TextBlock { Text = label, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(Color.FromRgb(76, 68, 88)), Margin = new Thickness(1, 0, 12, 0) });
+            Grid.SetColumn(control, 1);
+            row.Children.Add(control);
             return row;
         }
+
+        private UIElement ColorSetting(string label, TextBox input, bool currentLine)
+        {
+            var controls = new StackPanel { Orientation = Orientation.Horizontal };
+            input.Width = 112;
+            input.Margin = new Thickness(0, 0, 8, 0);
+            controls.Children.Add(input);
+            controls.Children.Add(Button("应用", delegate { ApplyTextColor(input, currentLine); }));
+            var content = new StackPanel();
+            content.Children.Add(controls);
+            content.Children.Add(ColorPalette(input, currentLine));
+            return SettingRow(label, content);
+        }
+
+        private static void StyleField(Control control)
+        {
+            control.MinHeight = 36;
+            control.Padding = new Thickness(9, 5, 9, 5);
+            control.Background = Brushes.White;
+            control.Foreground = new SolidColorBrush(Color.FromRgb(40, 34, 52));
+            control.BorderBrush = new SolidColorBrush(Color.FromRgb(218, 211, 226));
+            control.BorderThickness = new Thickness(1);
+        }
+
         private static Button Button(string text, RoutedEventHandler action)
         {
-            var button = new Button { Content = text, Padding = new Thickness(10, 5, 10, 5), Background = new SolidColorBrush(Color.FromRgb(232, 221, 239)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(199, 178, 210)) };
+            var button = new Button { Content = text, Padding = new Thickness(12, 6, 12, 6), MinHeight = 36, FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(55, 47, 68)), Background = new SolidColorBrush(Color.FromRgb(238, 233, 243)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 211, 226)), BorderThickness = new Thickness(1) };
             button.Click += action;
             return button;
         }
+
+        private static Button PrimaryButton(string text, RoutedEventHandler action)
+        {
+            var button = Button(text, action);
+            button.Foreground = Brushes.White;
+            button.Background = new SolidColorBrush(Color.FromRgb(113, 82, 142));
+            button.BorderBrush = new SolidColorBrush(Color.FromRgb(113, 82, 142));
+            button.FontWeight = FontWeights.SemiBold;
+            return button;
+        }
+
         private WrapPanel ColorPalette(TextBox input, bool currentLine)
         {
             var choices = new[,] {
@@ -756,7 +1086,7 @@ namespace LyricConnector
                 { "粉色", "#F4D7E7" }, { "玫红", "#F06292" }, { "薄荷", "#7DE2D1" }, { "青色", "#72DDF7" },
                 { "天蓝", "#8AB4F8" }, { "紫色", "#C4A1FF" }
             };
-            var palette = new WrapPanel { Margin = new Thickness(92, 0, 0, 3) };
+            var palette = new WrapPanel { Margin = new Thickness(0, 7, 0, 2) };
             for (var index = 0; index < choices.GetLength(0); index++)
             {
                 var selectedColor = choices[index, 1];
@@ -764,12 +1094,12 @@ namespace LyricConnector
                 var color = (Color)ColorConverter.ConvertFromString(selectedColor);
                 var swatch = new Button
                 {
-                    Width = 25,
-                    Height = 25,
+                    Width = 22,
+                    Height = 22,
                     Padding = new Thickness(0),
                     Margin = new Thickness(0, 0, 7, 5),
                     Background = new SolidColorBrush(color),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(120, 109, 130)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(202, 195, 212)),
                     BorderThickness = new Thickness(1),
                     ToolTip = label
                 };
@@ -791,6 +1121,10 @@ namespace LyricConnector
             return IntPtr.Zero;
         }
         private void UpdateOffset() { offsetLabel.Text = settings.Offset.ToString("+0.00;-0.00;0.00", CultureInfo.InvariantCulture) + " s"; }
+        private void UpdateCandidatePlaceholder()
+        {
+            candidateEmpty.Visibility = candidates.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
         private void UpdateOverlayVisibility()
         {
             var visible = settings.ShowLyrics != false;
@@ -801,6 +1135,9 @@ namespace LyricConnector
             else overlay.Hide();
             overlayVisibility.Content = visible ? "隐藏窗口" : "显示窗口";
             overlayVisibility.ToolTip = visible ? "隐藏整个悬浮窗口" : "重新显示整个悬浮窗口";
+            overlayVisibility.Background = visible ? new SolidColorBrush(Color.FromRgb(238, 233, 243)) : new SolidColorBrush(Color.FromRgb(113, 82, 142));
+            overlayVisibility.Foreground = visible ? new SolidColorBrush(Color.FromRgb(55, 47, 68)) : Brushes.White;
+            overlayVisibility.BorderBrush = visible ? new SolidColorBrush(Color.FromRgb(218, 211, 226)) : new SolidColorBrush(Color.FromRgb(113, 82, 142));
         }
 
         private void ApplyTextColor(TextBox input, bool currentLine)
@@ -812,9 +1149,16 @@ namespace LyricConnector
                 else settings.NextLineColor = color.ToString();
                 input.Text = color.ToString();
                 overlay.Apply(settings);
-                lyricStatus.Text = "歌词颜色已更新，关闭窗口后保存。颜色可使用 #RRGGBB 格式。";
+                displayStatus.Text = "颜色已更新，关闭窗口后保存。";
+                displayStatus.Foreground = new SolidColorBrush(Color.FromRgb(77, 120, 95));
+                displayStatus.Visibility = Visibility.Visible;
             }
-            catch (FormatException) { lyricStatus.Text = "颜色格式无效，请使用 #RRGGBB（例如 #F4D7E7）。"; }
+            catch (FormatException)
+            {
+                displayStatus.Text = "颜色格式无效，请使用 #RRGGBB（例如 #F4D7E7）。";
+                displayStatus.Foreground = new SolidColorBrush(Color.FromRgb(166, 66, 61));
+                displayStatus.Visibility = Visibility.Visible;
+            }
         }
 
         private async Task RefreshDevicesAsync(bool autoConnect)
@@ -919,6 +1263,7 @@ namespace LyricConnector
                 lyricsRetryCount = 0;
                 lyricsRetryDelaySeconds = 0;
                 lyrics = null; selected = null; candidates.ItemsSource = null; candidateRevision = -1;
+                UpdateCandidatePlaceholder();
                 lyricStatus.Text = "";
                 RefreshLyricsViewer();
             }
@@ -984,6 +1329,7 @@ namespace LyricConnector
                 if (queryCancellation != null) queryCancellation.Cancel();
                 candidateRevision = -1;
                 candidates.ItemsSource = null;
+                UpdateCandidatePlaceholder();
                 var cached = store.LoadCached(track);
                 if (cached != null) SetLyrics(cached);
                 lyricStatus.Text = cached != null
@@ -997,6 +1343,7 @@ namespace LyricConnector
             var revision = model.Revision;
             candidateRevision = -1;
             candidates.ItemsSource = null;
+            UpdateCandidatePlaceholder();
             lyricStatus.Text = "正在查询歌词…";
             try
             {
@@ -1012,6 +1359,7 @@ namespace LyricConnector
                 {
                     candidateRevision = revision;
                     candidates.ItemsSource = result.Candidates;
+                    UpdateCandidatePlaceholder();
                     var query = SongQuery.Infer(track);
                     var inference = !manual && query.Inferred ? "已提取歌名《" + query.Title + "》。" : "";
                     var expanded = !manual && result.ExpandedSearch ? "曲名直接匹配未命中，已扩大到专辑 / 歌手候选。" : "";
