@@ -908,7 +908,7 @@ namespace LyricConnector
             if (update.Revision < model.Revision) return;
             if (update.Kind == UpdateKind.Disconnected) activeSource = null;
             var changed = model.Accept(update);
-            sourceStatus.Text = model.Status + (model.Player.Length > 0 ? " · " + model.Player : "");
+            sourceStatus.Text = model.Status + (model.Player.Length > 0 ? " · " + DisplayPlayerName(model.Player) : "");
             if (update.Kind == UpdateKind.Disconnected) StartAutoReconnect();
             else if (update.Kind == UpdateKind.Snapshot) reconnectTimer.Stop();
             Console.WriteLine("AMS: " + update.Kind + " r" + update.Revision + " " + model.Status);
@@ -941,10 +941,21 @@ namespace LyricConnector
             Render();
         }
 
+        private static bool IsAppleMusicPlayer(string player)
+        {
+            return String.Equals(player, "Apple Music", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(player, "Music", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string DisplayPlayerName(string player)
+        {
+            return IsAppleMusicPlayer(player) ? "Apple Music" : player;
+        }
+
         private static bool SupportsOnlineLyrics(string player)
         {
             return String.Equals(player, "YouTube Music", StringComparison.OrdinalIgnoreCase)
-                || String.Equals(player, "Apple Music", StringComparison.OrdinalIgnoreCase)
+                || IsAppleMusicPlayer(player)
                 || String.Equals(player, "Spotify", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(player, "NetEase Music", StringComparison.OrdinalIgnoreCase)
                 || player == "网易云音乐"

@@ -77,7 +77,7 @@ flowchart LR
     Overlay -->|"播放 / 暂停 / 上一首 / 下一首"| Source
 ```
 
-Apple 的 AMS 规范定义了当前媒体 App 名称、曲目标题 / 艺人 / 时长、播放进度和远程命令。桌面端按这套通用属性接入，不为 YouTube Music 或 Apple Music 分别实现播放器代码。AMS 允许属性为空；当曲目总时长缺失时，程序仍可显示歌曲、歌词和已播放时间，但不能绘制比例进度条。Apple 也指出 iOS 设备上的 AMS 并非始终可用。[Apple Media Service 规范](https://developer.apple.com/library/archive/documentation/CoreBluetooth/Reference/AppleMediaService_Reference/Specification/Specification.html)
+Apple 的 AMS 规范定义了当前媒体 App 名称、曲目标题 / 艺人 / 时长、播放进度和远程命令。桌面端按这套通用属性接入，不为 YouTube Music 或 Apple Music 分别实现播放器代码。iPhone 上 Apple Music 的 AMS 播放器名称返回 `Music`，桌面端会将它识别并显示为 Apple Music。AMS 允许属性为空；当曲目总时长缺失时，程序仍可显示歌曲、歌词和已播放时间，但不能绘制比例进度条。Apple 也指出 iOS 设备上的 AMS 并非始终可用。[Apple Media Service 规范](https://developer.apple.com/library/archive/documentation/CoreBluetooth/Reference/AppleMediaService_Reference/Specification/Specification.html)
 
 1. **读取手机状态：** Windows 连接到已配对的 iPhone，并订阅 AMS 的歌曲元数据和播放状态。程序读取标题、歌手、专辑、时长、播放 / 暂停状态和进度；不读取手机屏幕、歌词页面或音频。
 2. **稳定曲目快照：** 切歌时先清空旧进度与歌词，等待元数据稳定后再读取完整曲目信息，避免异步歌词结果覆盖新歌曲。蓝牙状态通知用于响应播放和拖动进度，稳定播放期间以单调时钟外推位置，并定期向手机校准。

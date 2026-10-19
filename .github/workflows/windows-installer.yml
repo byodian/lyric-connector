@@ -34,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item .\artifacts\app\LyricConnector.exe .\artifacts\installer\LyricConnector.exe
-          Compress-Archive -Path .\artifacts\app\* -DestinationPath .\artifacts\installer\LyricConnector-0.2.1-win-x64.zip -CompressionLevel Optimal
+          Compress-Archive -Path .\artifacts\app\* -DestinationPath .\artifacts\installer\LyricConnector-0.2.2-win-x64.zip -CompressionLevel Optimal
 
       - name: Write SHA-256 checksum
         shell: pwsh
