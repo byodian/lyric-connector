@@ -76,17 +76,33 @@ namespace LyricConnector
     {
         private static bool IsNetEasePlayer(string player)
         {
-            return player == "NetEase Music" || player == "网易云音乐";
+            return String.Equals(player, "NetEase Music", StringComparison.OrdinalIgnoreCase)
+                || player == "网易云音乐";
+        }
+
+        private static bool IsQQMusicPlayer(string player)
+        {
+            return String.Equals(player, "QQMusic", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(player, "QQ Music", StringComparison.OrdinalIgnoreCase)
+                || player == "QQ音乐";
+        }
+
+        private static bool UsesCompositeArtistTitleMetadata(string player)
+        {
+            return IsNetEasePlayer(player) || IsQQMusicPlayer(player);
         }
 
         internal static Track Normalize(string player, Track track, out bool titleFromArtist)
         {
             titleFromArtist = false;
-            if (!IsNetEasePlayer(player)) return track;
-            var separator = track.Artist.LastIndexOf('/');
+            if (!UsesCompositeArtistTitleMetadata(player)) return track;
+            var qqMusic = IsQQMusicPlayer(player);
+            var separator = track.Artist.LastIndexOf(qqMusic ? '—' : '/');
             if (separator <= 0 || separator == track.Artist.Length - 1) return track;
-            var artist = track.Artist.Substring(0, separator).Trim();
-            var title = track.Artist.Substring(separator + 1).Trim();
+            var first = track.Artist.Substring(0, separator).Trim();
+            var second = track.Artist.Substring(separator + 1).Trim();
+            var artist = qqMusic ? second : first;
+            var title = qqMusic ? first : second;
             if (artist.Length == 0 || title.Length == 0) return track;
             titleFromArtist = true;
             return new Track { Title = title, Artist = artist, Album = track.Album, Duration = track.Duration };
@@ -100,7 +116,7 @@ namespace LyricConnector
         internal static bool HasTrackChanged(Packet packet, Track track, string player, bool titleFromArtist)
         {
             if (packet.Entity != 2) return false;
-            if (titleFromArtist && IsNetEasePlayer(player))
+            if (titleFromArtist && UsesCompositeArtistTitleMetadata(player))
             {
                 if (packet.Attribute == 2) return false;
                 if (packet.Attribute == 0)
