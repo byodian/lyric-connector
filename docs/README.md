@@ -22,7 +22,7 @@ Lyric Connector 将 iPhone 正在播放的音乐同步到 Windows 桌面歌词�
 - 桌面可执行程序目标为 .NET Framework 4.8。
 - 桌面端通过 Apple Media Service（AMS）读取当前播放器和曲目，并按设备公布的命令集发送控制。当前已实测 YouTube Music；Apple Music 的歌曲状态、歌词同步、暂停 / 恢复和下一首也已实测。
 
-当前可从源码启动；独立 WPF 程序、Inno Setup 内部安装包定义和 Microsoft Store MSIX 打包项目已加入仓库。本机已生成未签名测试安装器 `artifacts/installer/LyricConnector-Setup-0.1.0-x64.exe`，但尚未安装或验收；该目录被 Git 忽略，不会随源码提交。MSIX 的身份和商店视觉资源仍是占位草案，尚未生成 MSIX。
+当前可从源码启动；GitHub Releases 提供独立 WPF EXE、完整运行目录 ZIP、Inno Setup 安装程序和 SHA-256 校验文件。发行文件未签名，尚未在干净 Windows 环境完成安装验收。MSIX 的身份和商店视觉资源仍是占位草案，尚未生成 MSIX。
 
 ## 启动
 
@@ -89,7 +89,7 @@ Apple 的 AMS 规范定义了当前媒体 App 名称、曲目标题 / 艺人 / �
 
 显示设置和歌词映射保存在 Windows 当前用户的 `%LOCALAPPDATA%\LyricConnector` 目录：`settings.json` 保存窗口设置，`lyrics` 目录保存已选择或导入的歌词。歌词缓存按标题、歌手、专辑和曲目时长生成本地标识；AMS 没有提供跨播放器通用的曲目 ID。
 
-只有查询在线歌词时，程序才会访问 [LRCLIB 公网服务](https://lrclib.net) 并提交歌名 / 歌手检索条件；直接查询未命中时也可能提交专辑或歌手关键词用于扩展候选。接口说明见 [LRCLIB API 文档](https://lrclib.net/docs)。服务暂时不可用或未收录歌曲时，可以稍后重试、修正检索信息或导入本地歌词。歌词覆盖率和版本准确性由歌词源及具体歌曲决定。
+在线歌词服务只对 YouTube Music、Apple Music、网易云音乐、QQ 音乐、酷狗音乐和 Spotify 开放。其他播放器不会请求 LRCLIB；程序仍会读取本机已有的歌词缓存，也可以导入 LRC / TXT。受支持的播放器查询在线歌词时，程序会向 [LRCLIB 公网服务](https://lrclib.net) 提交歌名 / 歌手检索条件；直接查询未命中时也可能提交专辑或歌手关键词用于扩展候选。接口说明见 [LRCLIB API 文档](https://lrclib.net/docs)。服务暂时不可用或未收录歌曲时，可以稍后重试、修正检索信息或导入本地歌词。歌词覆盖率和版本准确性由歌词源及具体歌曲决定。
 
 ## 当前范围与限制
 

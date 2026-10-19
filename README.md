@@ -8,7 +8,7 @@
 
 ## 快速使用
 
-下面是从源码启动的步骤，需要 Windows、64 位 Windows PowerShell 5.1、Python 3、可用的蓝牙 LE，以及已与 Windows 配对的 iPhone。安装后的 WPF EXE 不需要 Python 或 `probes/`；它需要 Windows/.NET Framework 4.8 及蓝牙环境。当前本地测试安装器尚未完成安装验收，且未签名，不作为正式发行版本。
+下面是从源码启动的步骤，需要 Windows、64 位 Windows PowerShell 5.1、Python 3、可用的蓝牙 LE，以及已与 Windows 配对的 iPhone。安装后的 WPF EXE 不需要 Python 或 `probes/`；它需要 Windows/.NET Framework 4.8 及蓝牙环境。GitHub Releases 提供独立 EXE、完整运行目录 ZIP、Setup 安装程序和 SHA-256 校验文件；程序未签名，尚未完成干净 Windows 环境安装验收。
 
 1. 在 Windows 蓝牙设置中配对 iPhone，然后在手机 YouTube Music 或 Apple Music 中开始播放。
 2. 在项目根目录启动程序：Windows PowerShell 中运行 `python desktop/run.py`；WSL 中运行 `python3 desktop/run.py`（需启用 Windows 程序互操作）。
@@ -21,12 +21,12 @@
 | Windows + iPhone + YouTube Music | 已实现并实测 | 已验证歌曲信息、进度、暂停 / 恢复、拖动进度、切歌，以及上一首 / 播放暂停 / 下一首控制事件。 |
 | Windows + iPhone + Apple Music | 状态、歌词与基本控制已实测 | 已读取曲目并查询到 69 行同步歌词；悬浮窗暂停 / 恢复和下一首已验证。总时长未提供时仍显示歌词和已播放时间，比例进度条隐藏。 |
 | 桌面歌词悬浮窗 | 已实现 | 支持逐行歌词及当前行卡拉 OK 扫色、短进度条、悬停播放控件、双击打开桌面设置、控制窗口驻留系统托盘、字体 / 颜色 / 透明度设置、歌词偏移和本地 LRC 导入。 |
-| iPhone 网易云音乐、QQ 音乐、Spotify 等 | 后续适配目标 | 尚未逐一验证或适配；支持情况取决于应用提供的媒体状态及控制接口。 |
+| iPhone 网易云音乐、QQ 音乐、酷狗音乐、Spotify | 已接入，逐项验收中 | 通过 AMS 获取媒体状态；网易云、QQ 和酷狗的复合曲目信息已适配。在线歌词查询仅对已支持的平台开放。 |
 | macOS / Linux 桌面 | 暂不支持 | 当前桌面端依赖 Windows WinRT 蓝牙和 WPF。WSL 仅可在 Windows 互操作可用时启动 Windows 程序。 |
-| Windows 安装程序与签名 | 实现中 | 已生成未签名的本地 Inno Setup 测试包 `artifacts/installer/LyricConnector-Setup-0.1.0-x64.exe`；尚未安装验收。Microsoft Store MSIX 仍是首选签名路线，Partner Center 身份、正式图标和 Store 审核待完成。 |
+| Windows 安装程序与签名 | 已发布，待完整验收 | GitHub Releases 提供未签名的独立 EXE、便携 ZIP 和 Inno Setup 安装程序；尚未完成干净环境安装验收。Microsoft Store MSIX 仍是首选签名路线，Partner Center 身份、正式图标和 Store 审核待完成。 |
 | 自动更新 | 尚未实现 | 暂无自动更新机制。 |
 
-当前已完成 Windows 桌面 MVP。下一阶段重点是逐个验证网易云音乐、QQ 音乐、Spotify 等其他常用 iPhone 播放器；Apple Music 已走通通用 AMS 状态、歌词和基本控制接入。
+当前已完成 Windows 桌面 MVP。网易云音乐、QQ 音乐、酷狗音乐和 Spotify 已接入，后续将继续逐项验收各播放器的实际运行表现；Apple Music 已走通通用 AMS 状态、歌词和基本控制接入。
 
 ## 使用限制
 

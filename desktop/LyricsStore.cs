@@ -231,6 +231,14 @@ namespace LyricConnector
             File.Move(temporary, path);
         }
 
+        public LyricRecord LoadCached(Track track)
+        {
+            var path = CachePath(track);
+            return File.Exists(path)
+                ? new JavaScriptSerializer().Deserialize<LyricRecord>(File.ReadAllText(path, Encoding.UTF8))
+                : null;
+        }
+
         public LyricRecord Import(Track track, string path)
         {
             var record = new LyricRecord { trackName = track.Title, artistName = track.Artist, albumName = track.Album,
@@ -253,9 +261,9 @@ namespace LyricConnector
 
         public async Task<LyricResult> FindAsync(Track track, CancellationToken cancellation)
         {
-            var cache = CachePath(track);
-            if (File.Exists(cache))
-                return new LyricResult { Selected = new JavaScriptSerializer().Deserialize<LyricRecord>(File.ReadAllText(cache, Encoding.UTF8)), Candidates = new List<LyricMatch>() };
+            var cached = LoadCached(track);
+            if (cached != null)
+                return new LyricResult { Selected = cached, Candidates = new List<LyricMatch>() };
             var query = SongQuery.Infer(track);
             if (!query.Inferred && track.Artist.Length > 0 && track.Duration > 0)
             {

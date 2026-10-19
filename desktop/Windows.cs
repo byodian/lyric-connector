@@ -941,6 +941,20 @@ namespace LyricConnector
             Render();
         }
 
+        private static bool SupportsOnlineLyrics(string player)
+        {
+            return String.Equals(player, "YouTube Music", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(player, "Apple Music", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(player, "Spotify", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(player, "NetEase Music", StringComparison.OrdinalIgnoreCase)
+                || player == "网易云音乐"
+                || String.Equals(player, "QQMusic", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(player, "QQ Music", StringComparison.OrdinalIgnoreCase)
+                || player == "QQ音乐"
+                || String.Equals(player, "Kugou Music", StringComparison.OrdinalIgnoreCase)
+                || player == "酷狗音乐";
+        }
+
         private async Task FindLyricsAsync(bool manual, string requestedTitle, string requestedArtist, bool retryAttempt)
         {
             lyricsRetryTimer.Stop();
@@ -953,11 +967,23 @@ namespace LyricConnector
             var title = manual ? requestedTitle.Trim() : "";
             var artistName = manual ? requestedArtist.Trim() : "";
             if (manual && title.Length == 0) { lyricStatus.Text = "请输入歌曲名称。"; return; }
+            var track = model.Track;
+            if (!SupportsOnlineLyrics(model.Player))
+            {
+                if (queryCancellation != null) queryCancellation.Cancel();
+                candidateRevision = -1;
+                candidates.ItemsSource = null;
+                var cached = store.LoadCached(track);
+                if (cached != null) SetLyrics(cached);
+                lyricStatus.Text = cached != null
+                    ? "当前播放器不支持在线歌词搜索，已加载本地缓存歌词。"
+                    : "当前播放器不支持在线歌词搜索，可导入本地 LRC。";
+                return;
+            }
             if (queryCancellation != null) queryCancellation.Cancel();
             queryCancellation = new CancellationTokenSource();
             var token = queryCancellation.Token;
             var revision = model.Revision;
-            var track = model.Track;
             candidateRevision = -1;
             candidates.ItemsSource = null;
             lyricStatus.Text = "正在查询歌词…";
