@@ -350,6 +350,7 @@ namespace LyricConnector
         public string Font { get; set; }
         public double FontSize { get; set; }
         public double BackgroundOpacity { get; set; }
+        public bool HasConnectedToPhone { get; set; }
         public double Offset { get; set; }
         public bool Topmost { get; set; }
         public bool ClickThrough { get; set; }
@@ -362,8 +363,8 @@ namespace LyricConnector
 
         public static DesktopSettings Defaults()
         {
-            return new DesktopSettings { DeviceId = "", Font = "Microsoft YaHei UI", FontSize = 28,
-                BackgroundOpacity = 0.64, ShowLyrics = true, CurrentLineColor = "#F4D7E7", NextLineColor = "#B0A9C6",
+            return new DesktopSettings { DeviceId = "", Font = "Microsoft YaHei UI", FontSize = 16,
+                BackgroundOpacity = 0.64, HasConnectedToPhone = false, ShowLyrics = true, CurrentLineColor = "#F4D7E7", NextLineColor = "#B0A9C6",
                 Topmost = true, Width = 760, Left = -1, Top = -1 };
         }
     }

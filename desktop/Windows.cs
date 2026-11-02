@@ -561,6 +561,7 @@ namespace LyricConnector
         private readonly Button displayTab;
         private readonly ScrollViewer musicPage;
         private readonly ScrollViewer displayPage;
+        private readonly Border connectionGuidePanel;
         private readonly CheckBox clickThrough = new CheckBox { Content = "鼠标穿透（Ctrl + Alt + L 切换）" };
         private readonly TextBlock offsetLabel = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 76, TextAlignment = TextAlignment.Center };
         private CancellationTokenSource sourceCancellation;
@@ -738,29 +739,37 @@ namespace LyricConnector
             deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             deviceGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             deviceGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             StyleField(devices);
             devices.Margin = new Thickness(0, 0, 8, 0);
             var refreshDevices = Button("刷新", async delegate { await RefreshDevicesAsync(false); });
             var connect = PrimaryButton("连接", async delegate { await ConnectAsync(); });
+            var showConnectionGuide = Button("连接指南", delegate { ShowConnectionGuide(); });
             refreshDevices.MinWidth = 78;
             connect.MinWidth = 82;
+            showConnectionGuide.MinWidth = 84;
+            showConnectionGuide.Margin = new Thickness(8, 0, 0, 0);
             Grid.SetColumn(devices, 0);
             deviceGrid.Children.Add(devices);
             Grid.SetColumn(refreshDevices, 1);
             deviceGrid.Children.Add(refreshDevices);
             Grid.SetColumn(connect, 2);
             deviceGrid.Children.Add(connect);
+            Grid.SetColumn(showConnectionGuide, 3);
+            deviceGrid.Children.Add(showConnectionGuide);
             sourceStatus.Margin = new Thickness(1, 10, 1, 0);
             sourceStatus.FontSize = 12;
             sourceStatus.Foreground = new SolidColorBrush(Color.FromRgb(107, 99, 119));
             Grid.SetRow(sourceStatus, 1);
-            Grid.SetColumnSpan(sourceStatus, 3);
+            Grid.SetColumnSpan(sourceStatus, 4);
             deviceGrid.Children.Add(sourceStatus);
             musicContent.Children.Add(new Border { Background = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(229, 224, 235)),
                 BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(14), Child = deviceGrid,
                 Margin = new Thickness(0, 0, 0, 18) });
+            connectionGuidePanel = CreateConnectionGuide();
+            musicContent.Children.Add(connectionGuidePanel);
 
             musicContent.Children.Add(SectionHeading("歌曲与歌词", "可修正视频标题或歌手，再搜索同步歌词。"));
             searchTitle.ToolTip = "歌曲名称";
@@ -882,6 +891,16 @@ namespace LyricConnector
             opacityControl.Children.Add(opacityValue);
             displayContent.Children.Add(SectionHeading("背景与交互", "关闭鼠标穿透并悬停时，背景会暂时提高到 85%，方便操作按钮。"));
             displayContent.Children.Add(SettingRow("默认背景", opacityControl));
+            var quickAppearance = Button("一键设为 16px / 透明背景", delegate
+            {
+                size.Value = 16;
+                opacity.Value = 0;
+                SaveSettings();
+            });
+            quickAppearance.ToolTip = "同时将字号设为 16px、默认背景透明度设为 0%。";
+            var quickAppearanceRow = SettingRow("", quickAppearance);
+            quickAppearanceRow.Margin = new Thickness(0, 0, 0, 10);
+            displayContent.Children.Add(quickAppearanceRow);
             var topmost = new CheckBox { Content = "歌词窗口置顶", IsChecked = settings.Topmost, Margin = new Thickness(0, 8, 18, 8) };
             topmost.Click += delegate { settings.Topmost = topmost.IsChecked == true; overlay.Apply(settings); };
             clickThrough.IsChecked = settings.ClickThrough;
@@ -958,9 +977,7 @@ namespace LyricConnector
                 if (sourceCancellation != null) sourceCancellation.Cancel();
                 try { await sourceTask; }
                 catch (Exception error) { Console.WriteLine("SOURCE_STOP: " + error.Message); }
-                settings.Left = overlay.Left; settings.Top = overlay.Top; settings.Width = overlay.Width;
-                try { File.WriteAllText(settingsPath, new JavaScriptSerializer().Serialize(settings)); }
-                catch (Exception error) { Console.WriteLine("SETTINGS: " + error.Message); }
+                SaveSettings();
                 if (hotkey) UnregisterHotKey(new WindowInteropHelper(this).Handle, 1);
                 trayIcon.Visible = false;
                 trayIcon.Dispose();
@@ -971,6 +988,52 @@ namespace LyricConnector
                 cleanupComplete = true;
                 Dispatcher.BeginInvoke(new Action(Close));
             };
+        }
+
+        private Border CreateConnectionGuide()
+        {
+            var content = new StackPanel();
+            content.Children.Add(new TextBlock { Text = "首次连接 iPhone", FontSize = 14, FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(40, 34, 52)), Margin = new Thickness(0, 0, 0, 8) });
+            content.Children.Add(new TextBlock { Text = "1. 在 iPhone 和电脑上开启蓝牙，并在 Windows 蓝牙设置中配对 iPhone。",
+                TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(76, 68, 88)),
+                Margin = new Thickness(0, 0, 0, 6) });
+            content.Children.Add(new TextBlock { Text = "2. 回到这里，点“刷新”，选择 iPhone，再点“连接”。",
+                TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(76, 68, 88)),
+                Margin = new Thickness(0, 0, 0, 6) });
+            content.Children.Add(new TextBlock { Text = "3. 连接成功后，可播放音乐检查歌词读取。连接失败时可刷新设备后重试。",
+                TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(76, 68, 88)),
+                Margin = new Thickness(0, 0, 0, 10) });
+            var actions = new StackPanel { Orientation = Orientation.Horizontal };
+            var openBluetoothSettings = PrimaryButton("打开 Windows 蓝牙设置", delegate { OpenBluetoothSettings(); });
+            openBluetoothSettings.Margin = new Thickness(0, 0, 8, 0);
+            actions.Children.Add(openBluetoothSettings);
+            actions.Children.Add(Button("稍后连接", delegate { connectionGuidePanel.Visibility = Visibility.Collapsed; }));
+            content.Children.Add(actions);
+            return new Border { Background = new SolidColorBrush(Color.FromRgb(250, 248, 252)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(229, 224, 235)), BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10), Padding = new Thickness(14), Margin = new Thickness(0, 0, 0, 18),
+                Visibility = settings.HasConnectedToPhone ? Visibility.Collapsed : Visibility.Visible, Child = content };
+        }
+
+        private void ShowConnectionGuide()
+        {
+            connectionGuidePanel.Visibility = Visibility.Visible;
+        }
+
+        private void OpenBluetoothSettings()
+        {
+            try { Process.Start(new ProcessStartInfo("ms-settings:bluetooth") { UseShellExecute = true }); }
+            catch (Exception error) { sourceStatus.Text = "无法打开 Windows 蓝牙设置：" + error.Message; }
+        }
+
+        private void SaveSettings()
+        {
+            settings.Left = overlay.Left;
+            settings.Top = overlay.Top;
+            settings.Width = overlay.Width;
+            try { File.WriteAllText(settingsPath, new JavaScriptSerializer().Serialize(settings)); }
+            catch (Exception error) { Console.WriteLine("SETTINGS: " + error.Message); }
         }
 
         private void ShowControlWindow()
@@ -1252,6 +1315,12 @@ namespace LyricConnector
             if (update.Revision < model.Revision) return;
             if (update.Kind == UpdateKind.Disconnected) activeSource = null;
             var changed = model.Accept(update);
+            if (update.Kind == UpdateKind.Connected && !settings.HasConnectedToPhone)
+            {
+                settings.HasConnectedToPhone = true;
+                connectionGuidePanel.Visibility = Visibility.Collapsed;
+                SaveSettings();
+            }
             sourceStatus.Text = model.Status + (model.Player.Length > 0 ? " · " + DisplayPlayerName(model.Player) : "");
             if (update.Kind == UpdateKind.Disconnected) StartAutoReconnect();
             else if (update.Kind == UpdateKind.Snapshot) reconnectTimer.Stop();

@@ -49,7 +49,7 @@ namespace LyricConnector
         }
     }
 
-    public enum UpdateKind { Transition, Snapshot, Playback, Disconnected }
+    public enum UpdateKind { Transition, Connected, Snapshot, Playback, Disconnected }
 
     public sealed class SourceUpdate
     {
@@ -92,6 +92,11 @@ namespace LyricConnector
                 Player = "";
                 Status = update.Message;
                 return previousKey.Length > 0;
+            }
+            if (update.Kind == UpdateKind.Connected)
+            {
+                Status = update.Message;
+                return false;
             }
             if (update.Kind == UpdateKind.Snapshot)
             {

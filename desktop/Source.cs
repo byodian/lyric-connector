@@ -486,6 +486,7 @@ namespace LyricConnector
                 else Console.WriteLine("AMS_REMOTE: iPhone does not expose playback commands");
                 await WriteAsync(entity, new byte[] { 0, 0, 1 }, cancellation);
                 await WriteAsync(entity, new byte[] { 2, 0, 1, 2, 3 }, cancellation);
+                publish(new SourceUpdate { Kind = UpdateKind.Connected, Revision = revision, Message = "iPhone 已连接，等待播放信息。" });
                 var healthAt = Stopwatch.GetTimestamp();
 
                 while (true)
