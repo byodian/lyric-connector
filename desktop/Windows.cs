@@ -1417,8 +1417,7 @@ namespace LyricConnector
             try
             {
                 var result = manual
-                    ? new LyricResult { Candidates = LyricMatcher.Rank(track, title, artistName,
-                        await store.SearchAsync(title, artistName, token)) }
+                    ? await store.SearchAsync(track, title, artistName, token)
                     : await store.FindAsync(track, token);
                 if (token.IsCancellationRequested || closing || revision != model.Revision) return;
                 lyricsRetryCount = 0;
@@ -1431,27 +1430,21 @@ namespace LyricConnector
                     UpdateCandidatePlaceholder();
                     var query = SongQuery.Infer(track);
                     var inference = !manual && query.Inferred ? "已提取歌名《" + query.Title + "》。" : "";
-                    var expanded = !manual && result.ExpandedSearch ? "曲名直接匹配未命中，已扩大到专辑 / 歌手候选。" : "";
                     var bestIndex = result.Candidates.FindIndex(match => match.Record.instrumental || match.Record.Document().PlainText.Length > 0);
                     if (bestIndex >= 0)
                     {
                         var best = result.Candidates[bestIndex];
                         candidates.SelectedItem = best;
-                        if (best.ConfidenceScore < 80)
-                            lyricStatus.Text = inference + expanded + "找到候选，但最高置信度为 " + best.ConfidenceScore
-                                + "%（" + best.Confidence + "），未自动应用；请核对标题和版本后点击“使用所选歌词”。";
-                        else
-                        {
-                            SetLyrics(best.Record);
-                            var closeAlternative = result.Candidates.Where((match, index) => index != bestIndex)
-                                .Any(match => best.ConfidenceScore - match.ConfidenceScore < 8);
-                            var lyricType = best.Record.instrumental ? "纯音乐" : lyrics.Synced ? "同步歌词" : "纯文本歌词";
-                            lyricStatus.Text = inference + expanded + "已自动选择《" + best.Record.trackName + "》的" + lyricType + "（相似度 "
-                                + best.Score + "% · 置信度 " + best.ConfidenceScore + "%（" + best.Confidence + "））" + (closeAlternative
-                                    ? "；候选列表中还有相近结果，可随时切换。" : "。");
-                        }
+                        SetLyrics(best.Record);
+                        var closeAlternative = result.Candidates.Where((match, index) => index != bestIndex)
+                            .Any(match => match.Record.Document().Synced == lyrics.Synced
+                                && Math.Abs(best.ConfidenceScore - match.ConfidenceScore) < 8);
+                        var lyricType = best.Record.instrumental ? "纯音乐" : lyrics.Synced ? "同步歌词" : "纯文本歌词";
+                        lyricStatus.Text = inference + "已自动选择《" + best.Record.trackName + "》的" + lyricType + "（相似度 "
+                            + best.Score + "% · 置信度 " + best.ConfidenceScore + "%（" + best.Confidence + "））" + (closeAlternative
+                                ? "；候选列表中还有相近结果，可随时切换。" : "。");
                     }
-                    else lyricStatus.Text = inference + expanded + (result.Candidates.Count == 0
+                    else lyricStatus.Text = inference + (result.Candidates.Count == 0
                         ? "未找到歌词。可修正标题 / 歌手，或导入本地 LRC。"
                         : "找到候选，但没有可显示的歌词内容；请修正检索信息或导入本地 LRC。");
                 }
@@ -1656,7 +1649,6 @@ namespace LyricConnector
                     + (lyricsRetryCount + 1) + "/" + MaxLyricsRetries;
                 return "歌词请求超时 · 可在桌面重试或导入 LRC";
             }
-            if (status.IndexOf("找到候选，但最高置信度", StringComparison.Ordinal) >= 0) return "找到低置信度候选 · 请在桌面核对";
             if (status.IndexOf("没有可显示的歌词内容", StringComparison.Ordinal) >= 0) return "候选歌词无可显示内容 · 可在桌面修正检索信息或导入 LRC";
             if (candidates.Items.Count > 0) return "有歌词候选 · 请在桌面核对选择";
             if (status.IndexOf("未找到歌词", StringComparison.Ordinal) >= 0) return "未找到歌词 · 可在桌面修正信息或导入 LRC";

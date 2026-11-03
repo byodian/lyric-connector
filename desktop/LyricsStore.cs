@@ -41,7 +41,6 @@ namespace LyricConnector
     {
         public LyricRecord Selected { get; set; }
         public List<LyricMatch> Candidates { get; set; }
-        public bool ExpandedSearch { get; set; }
     }
 
     public sealed class LyricMatch
@@ -68,9 +67,9 @@ namespace LyricConnector
         public static List<LyricMatch> Rank(Track track, string title, string artist, IEnumerable<LyricRecord> records)
         {
             return records.Select(record => Match(track, title, artist, record))
-                .OrderByDescending(match => match.ConfidenceScore)
+                .OrderByDescending(match => match.Record.Document().Synced)
+                .ThenByDescending(match => match.ConfidenceScore)
                 .ThenByDescending(match => match.Score)
-                .ThenBy(match => String.IsNullOrWhiteSpace(match.Record.syncedLyrics) ? 1 : 0)
                 .ThenBy(match => Math.Abs(match.Record.duration.HasValue && track.Duration > 0
                     ? match.Record.duration.Value - track.Duration : Double.MaxValue))
                 .ToList();
@@ -207,12 +206,16 @@ namespace LyricConnector
         private readonly string directory;
         private readonly HttpClient http;
 
-        public LyricsStore(string directory)
+        public LyricsStore(string directory) : this(directory, new HttpClientHandler())
+        {
+        }
+
+        internal LyricsStore(string directory, HttpMessageHandler handler)
         {
             this.directory = directory;
             Directory.CreateDirectory(directory);
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-            http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
             http.DefaultRequestHeaders.UserAgent.ParseAdd("LyricConnector/0.1");
         }
 
@@ -265,53 +268,15 @@ namespace LyricConnector
             if (cached != null)
                 return new LyricResult { Selected = cached, Candidates = new List<LyricMatch>() };
             var query = SongQuery.Infer(track);
-            if (!query.Inferred && track.Artist.Length > 0 && track.Duration > 0)
-            {
-                var signature = "track_name=" + Uri.EscapeDataString(track.Title) + "&artist_name=" + Uri.EscapeDataString(track.Artist)
-                    + "&duration=" + track.Duration.ToString("0.###", CultureInfo.InvariantCulture);
-                if (track.Album.Length > 0) signature += "&album_name=" + Uri.EscapeDataString(track.Album);
-                var exact = await GetAsync("/api/get?" + signature, cancellation).ConfigureAwait(false);
-                if (exact != null)
-                {
-                    var record = new JavaScriptSerializer().Deserialize<LyricRecord>(exact);
-                    if (String.Equals(record.trackName, track.Title, StringComparison.OrdinalIgnoreCase)
-                        && String.Equals(record.artistName, track.Artist, StringComparison.OrdinalIgnoreCase)
-                        && record.duration.HasValue && Math.Abs(record.duration.Value - track.Duration) <= 2)
-                        return new LyricResult { Selected = record, Candidates = new List<LyricMatch>() };
-                }
-            }
-            var candidates = await SearchAsync(query.Title, query.Artist, cancellation).ConfigureAwait(false);
-            var directSyncedMatch = candidates.Any(record => String.Equals(record.trackName, query.Title, StringComparison.OrdinalIgnoreCase)
-                && (query.Artist.Length == 0 || String.Equals(record.artistName, query.Artist, StringComparison.OrdinalIgnoreCase))
-                && !String.IsNullOrWhiteSpace(record.syncedLyrics));
-            var expandedSearch = !directSyncedMatch;
-            if (expandedSearch)
-            {
-                var related = new List<LyricRecord>();
-                if (track.Album.Length > 0)
-                {
-                    var albumResults = await QueryAnyFieldAsync(track.Album, cancellation).ConfigureAwait(false);
-                    related.AddRange(albumResults.Where(record => Contains(record.albumName, track.Album)
-                        || Contains(record.artistName, query.Artist) || Contains(record.artistName, track.Artist)));
-                }
-                if (related.Count == 0 && query.Artist.Length > 0)
-                {
-                    var artistResults = await QueryAnyFieldAsync(query.Artist, cancellation).ConfigureAwait(false);
-                    related.AddRange(artistResults.Where(record => Contains(record.artistName, query.Artist)
-                        || Contains(record.artistName, track.Artist)));
-                }
-                candidates.AddRange(related);
-            }
-            var unique = candidates.GroupBy(CandidateKey).Select(group => group.First());
-            return new LyricResult { ExpandedSearch = expandedSearch, Candidates = LyricMatcher.Rank(track, query.Title, query.Artist, unique) };
+            return await SearchAsync(track, query.Title, query.Artist, cancellation).ConfigureAwait(false);
         }
 
-        public async Task<List<LyricRecord>> SearchAsync(string title, string artist, CancellationToken cancellation)
+        public async Task<LyricResult> SearchAsync(Track track, string title, string artist, CancellationToken cancellation)
         {
             var records = await QueryAsync(title, artist, cancellation).ConfigureAwait(false);
             if (records.Count == 0 && artist.Length > 0)
                 records = await QueryAsync(title, "", cancellation).ConfigureAwait(false);
-            return records;
+            return new LyricResult { Candidates = LyricMatcher.Rank(track, title, artist, records) };
         }
 
         private async Task<List<LyricRecord>> QueryAsync(string title, string artist, CancellationToken cancellation)
@@ -321,24 +286,6 @@ namespace LyricConnector
             var response = await GetAsync("/api/search?" + query, cancellation).ConfigureAwait(false);
             if (response == null) return new List<LyricRecord>();
             return new JavaScriptSerializer().Deserialize<List<LyricRecord>>(response);
-        }
-
-        private async Task<List<LyricRecord>> QueryAnyFieldAsync(string term, CancellationToken cancellation)
-        {
-            var response = await GetAsync("/api/search?q=" + Uri.EscapeDataString(term), cancellation).ConfigureAwait(false);
-            if (response == null) return new List<LyricRecord>();
-            return new JavaScriptSerializer().Deserialize<List<LyricRecord>>(response);
-        }
-
-        private static bool Contains(string value, string term)
-        {
-            return value != null && term.Length > 0 && value.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static string CandidateKey(LyricRecord record)
-        {
-            return record.id > 0 ? "id:" + record.id.ToString(CultureInfo.InvariantCulture)
-                : String.Join("\n", record.trackName ?? "", record.artistName ?? "", record.albumName ?? "");
         }
 
         public void Dispose() { http.Dispose(); }

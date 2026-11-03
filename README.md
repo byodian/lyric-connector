@@ -14,7 +14,7 @@ To run from source, you need Windows, 64-bit Windows PowerShell 5.1, Python 3, B
 
 1. Pair your iPhone in Windows Bluetooth settings, then start playing music in YouTube Music or Apple Music on the phone.
 2. From the project root, run `python desktop/run.py` in Windows PowerShell, or `python3 desktop/run.py` in WSL with Windows interoperability enabled.
-3. If the app does not connect automatically, click Refresh (刷新) in the desktop control window, select your iPhone, and click Connect (连接). Check the lyric candidates and choose the right recording. If an Apple Music title differs from the Chinese title in the lyrics database, check the expanded candidates or edit the title and search again. You can import a local LRC file when online lyrics are unavailable.
+3. If the app does not connect automatically, click Refresh (刷新) in the desktop control window, select your iPhone, and click Connect (连接). Check the lyric candidates and choose the right recording. If an Apple Music title differs from the Chinese title in the lyrics database, edit the title and search again. You can import a local LRC file when online lyrics are unavailable.
 
 ## Screenshots
 
@@ -69,7 +69,7 @@ The Windows desktop MVP is complete. NetEase Cloud Music, QQ Music, Kugou Music,
 
 - An iPhone player may play music without exposing AMS status to Windows or accepting remote commands.
 - This version requires manual reconnection after Bluetooth disconnects. Testing with the phone locked, headphones in use, and after sleep/resume is still pending.
-- Lyrics come from the [public LRCLIB service](https://lrclib.net) or local files. Coverage and how well the lyrics match your recording vary by song. When an Apple Music title differs from a Chinese entry in the lyrics database, the app expands the search to album and artist candidates. Check for covers and live versions before choosing. Plain text lyrics have no line-by-line timeline.
+- Lyrics come from the [public LRCLIB service](https://lrclib.net) or local files. Coverage and how well the lyrics match your recording vary by song. Automatic lookup checks the local cache first, then uses the same candidate search as manual lookup. If an Apple Music title differs from a Chinese entry in the database, edit the title and search again. Check for covers and live versions before choosing. Plain text lyrics have no line-by-line timeline.
 - Playback position comes from the player. The timing difference between the displayed lyrics and actual audio has not been measured systematically.
 
 ## Documentation
