@@ -1,79 +1,81 @@
 # Lyric Connector
 
-让 iPhone 继续播放音乐，由 Windows 桌面端读取歌曲和进度、独立查询同步歌词，并显示轻量悬浮歌词。桌面也可在悬浮窗中向手机发送播放控制；手机不需要打开歌词页面或安装配套 App。
+English | [简体中文](README.zh-CN.md)
 
-## 背景
+Keep listening on your iPhone and show synced lyrics on your Windows desktop. Lyric Connector reads the current song and playback position, looks up lyrics, and displays them in a lightweight floating window. You can also control playback from the overlay. Your phone does not need a companion app or an open lyrics page.
 
-很多人用手机或耳机听歌，却希望歌词始终显示在电脑桌面。Lyric Connector 将播放和歌词显示分开：iPhone 负责音乐与音频，桌面端负责歌词匹配、时间轴、外观和播放控制。当前实现通过蓝牙 Apple Media Service（AMS）获取媒体状态，不读取手机屏幕或音频。
+## Background
 
-## 快速使用
+If you listen on your phone or through headphones, you may still want lyrics on your computer screen. Lyric Connector leaves music playback and audio on the iPhone. The desktop app handles lyric matching, timing, appearance, and playback controls. It reads media status over Bluetooth using Apple Media Service (AMS), without reading the phone's screen or capturing audio.
 
-下面是从源码启动的步骤，需要 Windows、64 位 Windows PowerShell 5.1、Python 3、可用的蓝牙 LE，以及已与 Windows 配对的 iPhone。安装后的 WPF EXE 不需要 Python 或 `probes/`；它需要 Windows/.NET Framework 4.8 及蓝牙环境。GitHub Releases 提供独立 EXE、完整运行目录 ZIP、Setup 安装程序和 SHA-256 校验文件；程序未签名，尚未完成干净 Windows 环境安装验收。
+## Quick start
 
-1. 在 Windows 蓝牙设置中配对 iPhone，然后在手机 YouTube Music 或 Apple Music 中开始播放。
-2. 在项目根目录启动程序：Windows PowerShell 中运行 `python desktop/run.py`；WSL 中运行 `python3 desktop/run.py`（需启用 Windows 程序互操作）。
-3. 如果程序未自动连接，在桌面控制窗口点击“刷新”，选择 iPhone，再点击“连接”。检查歌词候选并选择正确版本；Apple Music 曲名与歌词库中文标题不一致时，可查看扩展候选或手动修改曲名后搜索。缺少在线歌词时可导入本地 LRC。
+To run from source, you need Windows, 64-bit Windows PowerShell 5.1, Python 3, Bluetooth LE, and an iPhone paired with Windows. The installed WPF executable needs Windows with .NET Framework 4.8 and Bluetooth support; it does not need Python or `probes/`. GitHub Releases provides a standalone EXE, a ZIP of the full runtime directory, a setup installer, and SHA-256 checksums. The app is unsigned, and installation testing on a clean Windows system is still pending.
 
-## 界面截图
+1. Pair your iPhone in Windows Bluetooth settings, then start playing music in YouTube Music or Apple Music on the phone.
+2. From the project root, run `python desktop/run.py` in Windows PowerShell, or `python3 desktop/run.py` in WSL with Windows interoperability enabled.
+3. If the app does not connect automatically, click Refresh (刷新) in the desktop control window, select your iPhone, and click Connect (连接). Check the lyric candidates and choose the right recording. If an Apple Music title differs from the Chinese title in the lyrics database, check the expanded candidates or edit the title and search again. You can import a local LRC file when online lyrics are unavailable.
 
-深色和浅色背景图使用同一张实际悬浮歌词截图叠加到示例桌面背景，方便比较文字与面板的对比度。
+## Screenshots
 
-| 深色桌面背景 | 浅色桌面背景 |
+The dark and light desktop examples use the same screenshot of the lyric overlay, composited onto sample backgrounds so you can compare text and panel contrast.
+
+| Dark desktop background | Light desktop background |
 | --- | --- |
-| ![深色桌面背景上的悬浮歌词](docs/desktop-overlay-dark.png) | ![浅色桌面背景上的悬浮歌词](docs/desktop-overlay-light.png) |
+| ![Lyric overlay on a dark desktop background](docs/desktop-overlay-dark.png) | ![Lyric overlay on a light desktop background](docs/desktop-overlay-light.png) |
 
-下面两图使用同一浅色示例桌面背景，对比悬浮窗本身在鼠标停留于窗口区域时的效果。穿透关闭时，悬停会显示操作控件并将背景透明度提高到 85%；穿透开启时，鼠标事件传递给下层窗口，悬浮窗收不到悬停事件，因此控件隐藏、背景恢复设置的透明度。
+These examples use the same light background with the pointer over the overlay. With click-through off, hovering reveals the controls and raises the background opacity to 85%. With click-through on, mouse events pass to the window underneath, so the controls stay hidden and the overlay keeps its configured opacity.
 
-| 穿透关闭：悬停效果触发 | 穿透开启：悬停效果不触发 |
+| Click-through off: hover controls visible | Click-through on: no hover response |
 | --- | --- |
-| ![鼠标穿透关闭，鼠标停留在悬浮窗上时显示操作控件与半透明背景](docs/desktop-hover-mouse-through-off.png) | ![鼠标穿透开启，鼠标停留在同一悬浮窗区域时控件隐藏且背景透明](docs/desktop-hover-mouse-through-on.png) |
+| ![Click-through off, with controls and a translucent panel visible under the pointer](docs/desktop-hover-mouse-through-off.png) | ![Click-through on, with controls hidden and the background transparent at the same pointer position](docs/desktop-hover-mouse-through-on.png) |
 
-桌面控制窗口的音乐与歌词页，以及悬浮窗口设置页：
+The desktop control window has separate pages for music and lyrics and for overlay settings:
 
-![音乐与歌词页，包含 iPhone 连接、当前状态和歌词匹配](docs/desktop-control.png)
+![Music and lyrics page with iPhone connection, playback status, and lyric matching](docs/desktop-control.png)
 
-![悬浮窗口设置页，包含窗口显示、字体和歌词颜色](docs/desktop-appearance-settings.png)
+![Overlay settings page with visibility, font, and lyric colors](docs/desktop-appearance-settings.png)
 
-全文歌词窗口：
+The full lyrics window:
 
-![全文歌词窗口，当前播放行以颜色高亮](docs/desktop-full-lyrics.png)
+![Full lyrics window with the current line highlighted](docs/desktop-full-lyrics.png)
 
-## 悬浮窗口支持的功能
+## Overlay features
 
-- 同时显示上一行、当前行和下一行；当前行按 LRC 时间戳渐进填色，效果按歌词行估算，不是逐词同步。
-- 播放器提供总时长时显示短进度条；悬停时显示上一首、播放 / 暂停、下一首、歌词提前量和全文歌词操作。
-- 悬停时背景透明度提高到 85%，鼠标移开后恢复设置值。右上角按钮可隐藏悬浮窗，系统托盘菜单可重新显示。
-- 悬浮控件可将歌词提前量每次调整 0.5 秒；桌面控制窗口还支持 0.25 秒微调和归零。
-- 全文歌词按钮打开独立窗口，自动跟随并高亮当前行。纯文本歌词可查看全文，但没有逐行同步效果。
-- 鼠标穿透可用 `Ctrl + Alt + L` 切换；关闭穿透后可拖动悬浮窗、从右下角调整大小，或双击打开桌面控制窗口。
-- 可设置字体、字号、当前行和下一行颜色、背景透明度及窗口置顶。
-- 播放控制是否可用取决于 iPhone 播放器提供的 AMS 命令；隐藏悬浮窗不会退出程序，控制窗口关闭后程序驻留系统托盘。
+- Shows the previous, current, and next lyric lines. The current line fills progressively using LRC timestamps. Timing is estimated per line, without word-level synchronization.
+- Shows a short progress bar when the player reports the total duration. Hover to reveal previous track, play/pause, next track, lyric offset, and full lyrics controls.
+- Raises background opacity to 85% on hover and restores your setting when the pointer leaves. The top-right button hides the overlay; you can show it again from the system tray menu.
+- Adjust lyric timing in 0.5-second steps from the overlay. The desktop control window also supports 0.25-second adjustments and a reset to zero.
+- Opens a separate full lyrics window that follows playback and highlights the current line. Plain text lyrics can be read in full but do not scroll in sync with playback.
+- Toggles click-through with `Ctrl + Alt + L`. With click-through off, you can drag the overlay, resize it from the bottom-right corner, or double-click it to open the desktop control window.
+- Lets you set the font, font size, current and next line colors, background opacity, and whether the overlay stays on top.
+- Enables playback controls according to the AMS commands supported by the iPhone player. Hiding the overlay keeps the app running. Closing the control window leaves the app in the system tray.
 
-## 支持度与开发进度
+## Support and development status
 
-| 项目 | 状态 | 当前情况 |
+| Platform or feature | Status | Details |
 | --- | --- | --- |
-| Windows + iPhone + YouTube Music | 已实现并实测 | 已验证歌曲信息、进度、暂停 / 恢复、拖动进度、切歌，以及上一首 / 播放暂停 / 下一首控制事件。 |
-| Windows + iPhone + Apple Music | 状态、歌词与基本控制已实测 | 已读取曲目并查询到 69 行同步歌词；悬浮窗暂停 / 恢复和下一首已验证。总时长未提供时仍显示歌词和已播放时间，比例进度条隐藏。 |
-| 桌面歌词悬浮窗 | 已实现 | 支持三行歌词上下文、当前行渐进填色、短进度条、悬停操作、鼠标穿透、全文歌词、拖动 / 调整大小、歌词偏移和外观设置。 |
-| iPhone 网易云音乐、QQ 音乐、酷狗音乐、Spotify | 已接入，逐项验收中 | 通过 AMS 获取媒体状态；网易云、QQ 和酷狗的复合曲目信息已适配。在线歌词查询仅对已支持的平台开放。 |
-| macOS / Linux 桌面 | 暂不支持 | 当前桌面端依赖 Windows WinRT 蓝牙和 WPF。WSL 仅可在 Windows 互操作可用时启动 Windows 程序。 |
-| Windows 安装程序与签名 | 已发布，待完整验收 | GitHub Releases 提供未签名的独立 EXE、便携 ZIP 和 Inno Setup 安装程序；尚未完成干净环境安装验收。Microsoft Store MSIX 仍是首选签名路线，Partner Center 身份、正式图标和 Store 审核待完成。 |
-| 自动更新 | 尚未实现 | 暂无自动更新机制。 |
+| Windows + iPhone + YouTube Music | Implemented and tested | Verified song metadata, playback position, pause/resume, seeking, track changes, and previous/play-pause/next control events. |
+| Windows + iPhone + Apple Music | Metadata, lyrics, and basic controls tested | Read track metadata and retrieved 69 lines of synced lyrics. Pause/resume and next track worked from the overlay. When total duration is missing, lyrics and elapsed time remain visible, and the proportional progress bar is hidden. |
+| Desktop lyric overlay | Implemented | Supports three lyric lines, progressive fill on the current line, a short progress bar, hover controls, click-through, full lyrics, dragging and resizing, lyric offsets, and appearance settings. |
+| iPhone NetEase Cloud Music, QQ Music, Kugou Music, and Spotify | Integrated; testing in progress for each player | Reads media status through AMS. Handles the combined metadata fields reported by NetEase, QQ, and Kugou. Online lyric lookup is enabled only for supported players. |
+| macOS / Linux desktop | Not supported | The desktop app depends on Windows WinRT Bluetooth APIs and WPF. WSL can launch the Windows app when Windows interoperability is available. |
+| Windows installers and signing | Released; full installation testing pending | GitHub Releases provides an unsigned standalone EXE, portable ZIP, and Inno Setup installer. Testing on a clean Windows system is pending. Microsoft Store MSIX is the preferred signing route; Partner Center identity, final icons, and Store review are still pending. |
+| Automatic updates | Not implemented | The app has no automatic update mechanism. |
 
-当前已完成 Windows 桌面 MVP。网易云音乐、QQ 音乐、酷狗音乐和 Spotify 已接入，后续将继续逐项验收各播放器的实际运行表现；Apple Music 已走通通用 AMS 状态、歌词和基本控制接入。
+The Windows desktop MVP is complete. NetEase Cloud Music, QQ Music, Kugou Music, and Spotify are integrated, with further testing planned for each player. Apple Music works through the shared AMS integration for media status, lyrics, and basic controls.
 
-## 使用限制
+## Limitations
 
-- 其他播放器即使能在 iPhone 播放，也不代表一定向 Windows 暴露 AMS 状态或接受远程控制。
-- 蓝牙断开后当前版本需要手动重新连接；锁屏、耳机并用、休眠恢复等场景尚未完成验收。
-- 歌词来自 [LRCLIB 公网服务](https://lrclib.net) 或本地文件，覆盖率和版本准确性因歌曲而异。Apple Music 曲名与中文歌词条目不一致时会扩大专辑 / 歌手候选，但仍需核对翻唱或现场版本；纯文本歌词没有逐行时间轴。
-- 已实现的播放位置来自播放器报告，歌词相对实际音频的误差尚未完成系统测量。
+- An iPhone player may play music without exposing AMS status to Windows or accepting remote commands.
+- This version requires manual reconnection after Bluetooth disconnects. Testing with the phone locked, headphones in use, and after sleep/resume is still pending.
+- Lyrics come from the [public LRCLIB service](https://lrclib.net) or local files. Coverage and how well the lyrics match your recording vary by song. When an Apple Music title differs from a Chinese entry in the lyrics database, the app expands the search to album and artist candidates. Check for covers and live versions before choosing. Plain text lyrics have no line-by-line timeline.
+- Playback position comes from the player. The timing difference between the displayed lyrics and actual audio has not been measured systematically.
 
-## 详细文档
+## Documentation
 
-[完整背景、安装与操作说明、工作原理、数据处理方式、限制和适配计划](docs/README.md)。
+The [full guide](docs/README.md) covers background, installation and usage, how the app works, data handling, limitations, and player support plans. The detailed documentation is currently in Chinese.
 
-Windows 安装包的实施进度和验收步骤见[安装包方案](docs/installation-plan.md)，源码脚本与安装版的差异见[分发运行时依赖说明](docs/distribution-runtime-dependencies.md)。当前优先采用 Microsoft Store MSIX，需由项目所有者在 Partner Center 保留应用名称并配置私有测试受众；[MSIX 实施说明](docs/msix-store-packaging.md)列出后续步骤。SignPath Foundation 的资格和流程调查见[SignPath 专项核查](docs/signpath-path.md)，其他签名选项见[签名方案调研](docs/code-signing-options.md)。
+See the [installer plan](docs/installation-plan.md) for packaging progress and installation checks, and [runtime dependencies](docs/distribution-runtime-dependencies.md) for the differences between source scripts and the installed app. Microsoft Store MSIX is the preferred distribution route. The project owner needs to reserve the app name in Partner Center and configure a private test audience; the [MSIX guide](docs/msix-store-packaging.md) lists the remaining steps. The [SignPath investigation](docs/signpath-path.md) covers SignPath Foundation eligibility and its process. Other options are covered in the [code signing research](docs/code-signing-options.md).
 
-更多实现细节与测试记录见[桌面 MVP](docs/desktop-mvp.md)、[技术方案](docs/technical-plan.md)和[YouTube Music AMS 实测](docs/youtubemusic-ams-validation.md)。
+Implementation details and test records are in the [desktop MVP notes](docs/desktop-mvp.md), [technical plan](docs/technical-plan.md), and [YouTube Music AMS validation](docs/youtubemusic-ams-validation.md).
