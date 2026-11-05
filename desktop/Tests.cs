@@ -165,6 +165,7 @@ namespace LyricConnector
             var overlay = new LyricWindow(defaults);
             Check(overlay.Title.IndexOf("桌面歌词", StringComparison.Ordinal) >= 0, "lyric window initializes with desktop lyrics title and glyph controls");
             overlay.Close();
+            LyricPreview();
             Check(!Lyrics.Parse("[00:99]invalid").Synced, "invalid seconds rejected");
             foreach (var invalid in new[] { "0,,", "1,1.0,", "1,1.0,nan", "1,NaN,10", "1,1.0,Infinity", "1,1,-1" })
             {
@@ -178,6 +179,35 @@ namespace LyricConnector
             Names();
             Replay(fixture);
             Console.WriteLine("RESULT: " + checks + " checks passed.");
+        }
+
+        private static void LyricPreview()
+        {
+            var settings = DesktopSettings.Defaults();
+            settings.CurrentLineColor = "#80F4D7E7";
+            settings.FontSize = 56;
+            var desktop = new LyricTextView();
+            var preview = new LyricTextView();
+            desktop.Apply(settings);
+            preview.Apply(settings);
+            desktop.SetText("上一行", "当前行", "下一行");
+            preview.SetText("上一行", "当前行", "下一行");
+            var active = (System.Windows.Controls.TextBlock)preview.Children[1];
+            var following = (System.Windows.Controls.TextBlock)preview.Children[2];
+            Check(active.Text == ((System.Windows.Controls.TextBlock)desktop.Children[1]).Text
+                && active.FontSize == 56 && following.FontSize == 56 * 0.72,
+                "preview and desktop render the same lyric text at the configured size");
+            var brush = (System.Windows.Media.LinearGradientBrush)active.Foreground;
+            preview.SetKaraokeProgress(0.35);
+            Check(brush.GradientStops[1].Offset == 0.35 && brush.GradientStops[2].Offset == 0.35
+                && brush.GradientStops[0].Color.A == 128 && brush.GradientStops[3].Color.A == 255,
+                "preview preserves progressive karaoke fill and configured color alpha");
+            preview.SetKaraokeProgress(0);
+            Check(brush.GradientStops.All(stop => stop.Color == brush.GradientStops[3].Color),
+                "unstarted lyric uses the secondary color without a filled edge");
+            preview.SetKaraokeProgress(1);
+            Check(brush.GradientStops.All(stop => stop.Color == brush.GradientStops[0].Color),
+                "completed lyric uses the current color across the entire line");
         }
 
         private sealed class LyricsHandler : HttpMessageHandler

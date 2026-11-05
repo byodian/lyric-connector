@@ -20,6 +20,7 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--test", action="store_true")
     mode.add_argument("--check-lyrics", action="store_true")
+    mode.add_argument("--check-ui", action="store_true", help="Check native UI interactions with isolated settings and lyric fixtures")
     mode.add_argument("--render-icon", action="store_true")
     parser.add_argument("--smoke-seconds", type=int, default=0)
     args = parser.parse_args()
@@ -32,7 +33,7 @@ def main() -> int:
     directory = Path(__file__).resolve().parent
     imports = set()
     units = []
-    for filename in ("Core.cs", "SongQuery.cs", "Source.cs", "LyricsStore.cs", "Windows.cs", "Program.cs", "SongGlyph.cs", "Tests.cs"):
+    for filename in ("Core.cs", "SongQuery.cs", "Source.cs", "LyricsStore.cs", "LyricTextView.cs", "ControlTheme.cs", "Windows.cs", "Program.cs", "SongGlyph.cs", "Tests.cs", "UiChecks.cs"):
         source = (directory / filename).read_text(encoding="utf-8")
         imports.update(re.findall(r"^using [\w.]+;\s*$", source, re.MULTILINE))
         units.append(re.sub(r"^using [\w.]+;\s*$", "", source, flags=re.MULTILINE))
@@ -63,6 +64,15 @@ Add-Type -TypeDefinition $desktopSource -CompilerParameters $parameters
         script += "$fixture = @'\n" + fixture + "\n'@\n[LyricConnector.Tests]::Run($fixture)\n"
     elif args.check_lyrics:
         script += "[LyricConnector.Tests]::CheckProvider()\n"
+    elif args.check_ui:
+        icon_path = str(directory / "assets" / "lyric-connector.ico")
+        screenshots = directory.parent / "docs" / "lyric-connector-ui-package" / "verification"
+        screenshots.mkdir(parents=True, exist_ok=True)
+        screenshot_path = str(screenshots)
+        if os.name != "nt":
+            icon_path = subprocess.check_output(["wslpath", "-w", icon_path], text=True).strip()
+            screenshot_path = subprocess.check_output(["wslpath", "-w", screenshot_path], text=True).strip()
+        script += "[LyricConnector.UiChecks]::Run(" + literal(icon_path) + ", " + literal(screenshot_path) + ")\n"
     elif args.render_icon:
         icon = directory / "assets" / "lyric-connector.ico"
         preview = directory.parent / "docs" / "desktop-icon.png"
