@@ -1234,7 +1234,7 @@ namespace LyricConnector
             content.Children.Add(actions);
             return new Border { BorderBrush = Ink("#D9C9E6"), BorderThickness = new Thickness(2, 0, 0, 0),
                 Padding = new Thickness(12, 0, 0, 0), Margin = new Thickness(0, 10, 0, 0),
-                Visibility = settings.HasConnectedToPhone ? Visibility.Collapsed : Visibility.Visible, Child = content };
+                Visibility = Visibility.Collapsed, Child = content };
         }
 
         private void OpenBluetoothSettings()
@@ -1744,9 +1744,9 @@ namespace LyricConnector
             AutomationProperties.SetName(playbackConnectionBadge, playbackConnectionBadge.ToolTip.ToString());
             connectionState.Text = connected ? "● 已连接" + (model.Player.Length > 0 ? " · " + DisplayPlayerName(model.Player) : "")
                 : connectionBusy ? "处理中" : reconnectTimer.IsEnabled ? "等待重连" : "未连接";
-            if (!connected) connectionDetailsExpanded = false;
-            connectionDetails.Visibility = connected && !connectionDetailsExpanded ? Visibility.Collapsed : Visibility.Visible;
-            manageConnection.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+            connectionDetails.Visibility = settings.HasConnectedToPhone && !connectionDetailsExpanded
+                ? Visibility.Collapsed : Visibility.Visible;
+            manageConnection.Visibility = settings.HasConnectedToPhone ? Visibility.Visible : Visibility.Collapsed;
             manageConnection.Content = connectionDetailsExpanded ? "收起" : "管理设备";
             AutomationProperties.SetName(manageConnection, manageConnection.Content.ToString());
             sourceStatus.Visibility = model.Ready ? Visibility.Collapsed : Visibility.Visible;
@@ -1889,11 +1889,17 @@ namespace LyricConnector
             {
                 activeSource = null;
                 connectionBusy = false;
+                if (!manuallyDisconnected)
+                {
+                    connectionDetailsExpanded = true;
+                    connectionGuidePanel.Visibility = Visibility.Visible;
+                }
             }
             var changed = model.Accept(update);
             if (update.Kind == UpdateKind.Connected)
             {
                 connectionBusy = false;
+                connectionDetailsExpanded = false;
                 connectionGuidePanel.Visibility = Visibility.Collapsed;
                 if (!settings.HasConnectedToPhone)
                 {
