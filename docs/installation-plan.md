@@ -27,7 +27,7 @@
 7. 生成正确尺寸的 Store 视觉资源，在 Windows 上安装测试 MSIX，验证启动、托盘、已配对 iPhone 的蓝牙状态读取、歌词网络查询、升级和卸载行为。
 8. 生成 `.msixupload` 并提交 Partner Center。首发设置为 Private audience，添加指定测试者组并通过 Store 审核；Store 发布后再验证 Store 签名和私有受众安装。
 
-当前工作流位于 `.github/workflows/windows-installer.yml`，只响应手动触发。GitHub Actions 中选择 “Windows installer artifact” 并手动运行后，会上传未签名的安装工件及 SHA-256 文件（保留 30 天）供内部验证；它不会创建 Release 或对外发布。
+当前工作流位于 `.github/workflows/windows-installer.yml`，通过 GitHub Actions 手动运行。默认只生成并上传未签名的安装工件及 SHA-256 文件（保留 30 天）供内部验证。发布时勾选 `publish_release`：同一工作流会在 Windows runner 上打包，再由后续远端 job 下载 Actions 工件并创建 `v<项目版本>` 标签和 GitHub Release，附上安装程序、便携 ZIP、主程序及校验文件；不需要将工件下载到开发机。发布前必须同步更新项目和安装程序版本，并添加 `docs/releases/v<版本>.md`；工作流会校验版本、说明文件及标签，且仅允许从 `main` 发布。
 
 ## 安装时的使用条件
 

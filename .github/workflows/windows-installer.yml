@@ -1,20 +1,29 @@
-name: Windows installer artifact
+name: Windows installer package and release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the generated package as a GitHub Release
+        required: false
+        default: false
+        type: boolean
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   package:
     runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.prepare.outputs.version }}
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -31,12 +40,23 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" .\installer\LyricConnector.iss
 
       - name: Prepare application files
+        id: prepare
         shell: pwsh
         run: |
           $project = [xml](Get-Content .\desktop\LyricConnector.csproj -Raw)
           $appVersion = $project.Project.PropertyGroup.Version
+          $installer = Get-Content .\installer\LyricConnector.iss -Raw
+          $installerVersion = [regex]::Match($installer, '(?m)^#define AppVersion "([^"]+)"$').Groups[1].Value
+          if ($installerVersion -ne $appVersion) {
+            throw "Installer version '$installerVersion' does not match application version '$appVersion'."
+          }
+          $releaseNotes = "docs/releases/v$appVersion.md"
+          if (-not (Test-Path -LiteralPath $releaseNotes)) {
+            throw "Release notes are missing: $releaseNotes"
+          }
           Copy-Item .\artifacts\app\LyricConnector.exe .\artifacts\installer\LyricConnector.exe
           Compress-Archive -Path .\artifacts\app\* -DestinationPath ".\artifacts\installer\LyricConnector-$appVersion-win-x64.zip" -CompressionLevel Optimal
+          "version=$appVersion" >> $env:GITHUB_OUTPUT
 
       - name: Write SHA-256 checksum
         shell: pwsh
@@ -48,9 +68,65 @@ jobs:
             Set-Content .\artifacts\installer\SHA256SUMS.txt -Encoding ascii
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: lyric-connector-windows-x64
           path: .\artifacts\installer\*
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    if: ${{ inputs.publish_release }}
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out packaged source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: lyric-connector-windows-x64
+          path: artifacts/installer
+
+      - name: Validate release tag
+        uses: actions/github-script@v9
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        with:
+          script: |
+            const version = process.env.RELEASE_VERSION;
+            const tag = `v${version}`;
+            if (context.ref !== "refs/heads/main") {
+              core.setFailed("Releases can only be published from main.");
+              return;
+            }
+
+            let tagExists = false;
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              });
+              tagExists = true;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            if (tagExists) {
+              core.setFailed(`Tag ${tag} already exists. Increment the project version before publishing.`);
+            }
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.package.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Lyric Connector ${{ needs.package.outputs.version }}
+          body_path: docs/releases/v${{ needs.package.outputs.version }}.md
+          files: artifacts/installer/*
+          fail_on_unmatched_files: true
