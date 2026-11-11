@@ -1155,7 +1155,7 @@ namespace LyricConnector
             ApplyAppearance();
             ticker = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             ticker.Tick += delegate { Render(); };
-            reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
             reconnectTimer.Tick += async delegate { await TryAutoReconnectAsync(); };
             lyricsRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
             lyricsRetryTimer.Tick += async delegate
@@ -1731,8 +1731,10 @@ namespace LyricConnector
             refreshDevices.IsEnabled = !refreshingDevices && !connectionBusy;
             refreshDevices.Content = refreshingDevices ? "刷新中…" : "刷新";
             connect.Tag = ControlTheme.Glyph(activeSource != null ? "disconnect" : "connect");
-            connect.Content = connectionBusy ? (manuallyDisconnected ? "断开中…" : "连接中…") : activeSource != null ? "断开" : "连接";
-            connect.IsEnabled = !connectionBusy && !refreshingDevices && (activeSource != null || devices.SelectedItem != null);
+            if (connectionBusy)
+                connect.Content = activeSource != null ? "取消连接" : manuallyDisconnected ? "断开中…" : "连接中…";
+            else connect.Content = activeSource != null ? "断开" : "连接";
+            connect.IsEnabled = !refreshingDevices && (activeSource != null || (!connectionBusy && devices.SelectedItem != null));
             var connected = activeSource != null && !connectionBusy;
             playbackConnectionStatus.Text = connected ? "已连接" : connectionBusy ? "处理中" : reconnectTimer.IsEnabled ? "等待重连" : "未连接";
             playbackConnectionStatus.Foreground = connected ? Ink("#DDF4E3") : Ink("#D1C5DD");
@@ -1805,7 +1807,6 @@ namespace LyricConnector
         private void StartAutoReconnect()
         {
             if (closing || manuallyDisconnected || (String.IsNullOrEmpty(settings.DeviceId) && requestedDevice.Length == 0)) return;
-            sourceStatus.Text = "等待 iPhone 蓝牙可用，将自动重连。";
             if (!reconnectTimer.IsEnabled) reconnectTimer.Start();
             UpdateConnectionControls();
         }
@@ -1864,7 +1865,7 @@ namespace LyricConnector
                 if (!closing && generation == connectionGeneration) Accept(update);
             })), model.Revision);
             activeSource = source;
-            sourceTask = Task.Run(() => source.RunAsync(sourceCancellation.Token));
+            sourceTask = source.RunAsync(sourceCancellation.Token);
             UpdateConnectionControls();
         }
 

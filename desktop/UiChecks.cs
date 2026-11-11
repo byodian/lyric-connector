@@ -79,6 +79,7 @@ namespace LyricConnector
                     window.GetType().GetField("manuallyDisconnected", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, false);
                     Invoke(window, "Accept", new SourceUpdate { Kind = UpdateKind.Disconnected, Revision = model.Revision + 1, Message = "测试意外断开" });
                     Check(reconnect.IsEnabled, "unexpected disconnect still schedules automatic reconnect");
+                    Check(Field<TextBlock>(window, "sourceStatus").Text == "测试意外断开", "automatic reconnect preserves the connection error");
                     reconnect.Stop();
                     var devices = Field<ComboBox>(window, "devices");
                     devices.ItemsSource = new[] { fixtureDevice };
@@ -87,6 +88,10 @@ namespace LyricConnector
                         "full device ID remains available when the connected selector is disabled");
                     window.GetType().GetField("activeSource", BindingFlags.Instance | BindingFlags.NonPublic)
                         .SetValue(window, new AmsSource(fixtureDevice, update => { }, model.Revision));
+                    window.GetType().GetField("connectionBusy", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, true);
+                    Invoke(window, "UpdateConnectionControls");
+                    var connect = Field<Button>(window, "connect");
+                    Check(connect.IsEnabled && (string)connect.Content == "取消连接", "in-progress connection can be cancelled");
                     Invoke(window, "Accept", new SourceUpdate { Kind = UpdateKind.Connected, Revision = model.Revision, Message = "测试连接" });
                     Check(Field<Border>(window, "connectionGuidePanel").Visibility == Visibility.Collapsed,
                         "successful connection collapses first-use connection help");

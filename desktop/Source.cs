@@ -21,10 +21,10 @@ namespace LyricConnector
             .Single(method => method.Name == "AsTask" && method.IsGenericMethodDefinition
                 && method.GetParameters().Length == 1 && method.GetParameters()[0].ParameterType.Name == "IAsyncOperation`1");
 
-        public static async Task<T> Await<T>(object operation, CancellationToken cancellation)
+        public static async Task<T> Await<T>(object operation, CancellationToken cancellation, int timeoutSeconds = 15)
         {
             var task = (Task<T>)asTask.MakeGenericMethod(typeof(T)).Invoke(null, new[] { operation });
-            var limit = Task.Delay(TimeSpan.FromSeconds(15), cancellation);
+            var limit = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), cancellation);
             if (await Task.WhenAny(task, limit).ConfigureAwait(false) != task)
             {
                 cancellation.ThrowIfCancellationRequested();
@@ -430,13 +430,30 @@ namespace LyricConnector
             IDisposable connection = null;
             try
             {
-                device = await WinRt.Await<BluetoothLEDevice>(BluetoothLEDevice.FromIdAsync(choice.Id), cancellation);
+                // FromIdAsync may prompt for consent and must start on the UI thread.
+                device = await WinRt.Await<BluetoothLEDevice>(BluetoothLEDevice.FromIdAsync(choice.Id), cancellation).ConfigureAwait(false);
                 if (device == null) throw new InvalidOperationException("无法访问这部 iPhone，请确认蓝牙连接。");
-                var services = await WinRt.Await<GattDeviceServicesResult>(device.GetGattServicesForUuidAsync(serviceId, BluetoothCacheMode.Uncached), cancellation);
-                if (services.Status != GattCommunicationStatus.Success || services.Services.Count != 1)
-                    throw new InvalidOperationException("未发现手机播放状态。请确认蓝牙连接并开始播放音乐。");
-                service = services.Services[0];
-                await WinRt.Await<GattOpenStatus>(service.OpenAsync(GattSharingMode.SharedReadAndWrite), cancellation);
+                GattDeviceServicesResult services;
+                try
+                {
+                    services = await WinRt.Await<GattDeviceServicesResult>(
+                        device.GetGattServicesForUuidAsync(serviceId, BluetoothCacheMode.Uncached), cancellation, 45).ConfigureAwait(false);
+                }
+                catch (TimeoutException error)
+                {
+                    throw new TimeoutException("读取 iPhone 媒体服务超时。请在 Windows 蓝牙设置中重新连接 iPhone。", error);
+                }
+                var discovered = services.Services;
+                if (services.Status != GattCommunicationStatus.Success || discovered == null || discovered.Count != 1)
+                {
+                    if (discovered != null)
+                        foreach (var item in discovered) item.Dispose();
+                    if (services.Status != GattCommunicationStatus.Success)
+                        throw new InvalidOperationException("无法读取 iPhone 媒体服务（" + services.Status + "）。请检查蓝牙连接。");
+                    throw new InvalidOperationException("未发现 iPhone 媒体服务。请在手机上播放音乐后重试。");
+                }
+                service = discovered[0];
+                await WinRt.Await<GattOpenStatus>(service.OpenAsync(GattSharingMode.SharedReadAndWrite), cancellation).ConfigureAwait(false);
                 if (service.SharingMode != GattSharingMode.SharedReadAndWrite) throw new InvalidOperationException("手机播放状态访问被拒绝。");
                 var characters = await WinRt.Await<GattCharacteristicsResult>(service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached), cancellation);
                 if (characters.Status != GattCommunicationStatus.Success) throw new InvalidOperationException("无法读取手机播放属性。");
