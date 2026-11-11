@@ -79,3 +79,7 @@
 Windows 安装包的实施进度和验收步骤见[安装包方案](docs/installation-plan.md)，源码脚本与安装版的差异见[分发运行时依赖说明](docs/distribution-runtime-dependencies.md)。当前优先采用 Microsoft Store MSIX，需由项目所有者在 Partner Center 保留应用名称并配置私有测试受众；[MSIX 实施说明](docs/msix-store-packaging.md)列出后续步骤。SignPath Foundation 的资格和流程调查见[SignPath 专项核查](docs/signpath-path.md)，其他签名选项见[签名方案调研](docs/code-signing-options.md)。
 
 更多实现细节与测试记录见[桌面 MVP](docs/desktop-mvp.md)、[技术方案](docs/technical-plan.md)和[YouTube Music AMS 实测](docs/youtubemusic-ams-validation.md)。
+
+## 开源协议
+
+本项目采用 MIT 许可证，详情见 [LICENSE](LICENSE)。

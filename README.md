@@ -79,3 +79,7 @@ The [full guide](docs/README.md) covers background, installation and usage, how 
 See the [installer plan](docs/installation-plan.md) for packaging progress and installation checks, and [runtime dependencies](docs/distribution-runtime-dependencies.md) for the differences between source scripts and the installed app. Microsoft Store MSIX is the preferred distribution route. The project owner needs to reserve the app name in Partner Center and configure a private test audience; the [MSIX guide](docs/msix-store-packaging.md) lists the remaining steps. The [SignPath investigation](docs/signpath-path.md) covers SignPath Foundation eligibility and its process. Other options are covered in the [code signing research](docs/code-signing-options.md).
 
 Implementation details and test records are in the [desktop MVP notes](docs/desktop-mvp.md), [technical plan](docs/technical-plan.md), and [YouTube Music AMS validation](docs/youtubemusic-ams-validation.md).
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
