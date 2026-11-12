@@ -46,7 +46,7 @@ jobs:
           $project = [xml](Get-Content .\desktop\LyricConnector.csproj -Raw)
           $appVersion = $project.Project.PropertyGroup.Version
           $installer = Get-Content .\installer\LyricConnector.iss -Raw
-          $installerVersion = [regex]::Match($installer, '(?m)^#define AppVersion "([^"]+)"$').Groups[1].Value
+          $installerVersion = [regex]::Match($installer, '(?m)^#define AppVersion "([^"]+)"\r?$').Groups[1].Value
           if ($installerVersion -ne $appVersion) {
             throw "Installer version '$installerVersion' does not match application version '$appVersion'."
           }
