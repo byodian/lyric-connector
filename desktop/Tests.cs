@@ -90,6 +90,13 @@ namespace LyricConnector
             var playerUpdate = new Packet { Entity = 0, Attribute = 0, Value = "Apple Music" };
             Check(AmsSource.ChangesPlayer(playerUpdate, "YouTube Music"), "player change triggers a fresh media snapshot");
             Check(!AmsSource.ChangesPlayer(playerUpdate, "Apple Music"), "same player name does not restart the media snapshot");
+            var source = new AmsSource(new DeviceChoice(), update => { }, 9);
+            var transition = typeof(AmsSource).GetMethod("Transition", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var snapshotDeadline = typeof(AmsSource).GetField("metadataChangedAt", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            transition.Invoke(source, new object[] { 100L, "正在切换播放器" });
+            transition.Invoke(source, new object[] { 500L, "正在切换歌曲" });
+            Check((long)snapshotDeadline.GetValue(source) == 100L,
+                "metadata updates during a player transition do not postpone the fresh snapshot");
             var netEaseRaw = new Track { Title = "让唇在无味的衣领上 笑说最爱你的气味", Artist = "陈慧娴/傻女",
                 Album = "宝丽金难忘的回忆精选", Duration = 230 };
             bool netEaseTitleFromArtist;

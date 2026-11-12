@@ -404,9 +404,9 @@ namespace LyricConnector
 
         private void Transition(long timestamp, string message)
         {
-            metadataChangedAt = timestamp;
             if (!dirty)
             {
+                metadataChangedAt = timestamp;
                 dirty = true;
                 waitingPublished = true;
                 snapshotReadStarted = false;
@@ -416,6 +416,7 @@ namespace LyricConnector
             }
             else if (!waitingPublished)
             {
+                metadataChangedAt = timestamp;
                 waitingPublished = true;
                 publish(new SourceUpdate { Kind = UpdateKind.Transition, Revision = revision, Message = message });
             }

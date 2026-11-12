@@ -534,9 +534,16 @@ namespace LyricConnector
         private readonly TextBlock sourceStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
         private readonly TextBlock trackTitle = new TextBlock { FontSize = 23, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
         private readonly TextBlock artist = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        private readonly TextBlock progress = new TextBlock();
+        private readonly TextBlock currentTime = new TextBlock();
+        private readonly TextBlock totalTime = new TextBlock();
         private readonly TextBlock playbackConnectionStatus = new TextBlock();
         private readonly Border playbackConnectionBadge = new Border();
+        private readonly System.Windows.Shapes.Path playbackConnectionIcon;
+        private readonly Button settingsPreviousTrack;
+        private readonly Button settingsPlayPause;
+        private readonly Button settingsNextTrack;
+        private byte settingsPlayPauseCommand = RemoteCommand.TogglePlayPause;
+        private bool settingsPlayPauseShowsPlay = true;
         private readonly TextBlock lyricStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
         private readonly TextBox searchTitle = new TextBox();
         private readonly TextBox searchArtist = new TextBox();
@@ -546,7 +553,12 @@ namespace LyricConnector
         private readonly LyricTextView preview = new LyricTextView();
         private readonly Border previewBackground = new Border { CornerRadius = new CornerRadius(8) };
         private readonly TextBlock previewLabel = new TextBlock();
-        private readonly ProgressBar playbackProgress = new ProgressBar { Minimum = 0, Maximum = 1, Height = 5, IsHitTestVisible = false, Visibility = Visibility.Hidden };
+        private readonly ProgressBar playbackProgress = new ProgressBar { Minimum = 0, Maximum = 1, Height = 4, IsHitTestVisible = false, Visibility = Visibility.Hidden };
+        private readonly Grid playbackProgressHost = new Grid { Height = 14, ClipToBounds = false };
+        private readonly Border playbackProgressThumb = new Border { Width = 10, Height = 10, CornerRadius = new CornerRadius(5),
+            Background = Ink("#F1D7FC"), BorderBrush = Ink("#8C61A8"), BorderThickness = new Thickness(1),
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed, IsHitTestVisible = false };
         private readonly TextBlock lyricSource = new TextBlock();
         private readonly TextBlock connectionState = new TextBlock();
         private readonly StackPanel connectionDetails = new StackPanel();
@@ -724,65 +736,90 @@ namespace LyricConnector
 
             trackTitle.Text = "等待歌曲信息";
             artist.Text = "连接 iPhone 后播放音乐";
+            settingsPreviousTrack = TrackActionButton("播放上一首", "previous", delegate
+            { SendRemoteCommand(RemoteCommand.PreviousTrack); }, false);
+            settingsPlayPause = TrackActionButton("播放或暂停", "play", delegate
+            { SendRemoteCommand(settingsPlayPauseCommand); }, true);
+            settingsNextTrack = TrackActionButton("播放下一首", "next", delegate
+            { SendRemoteCommand(RemoteCommand.NextTrack); }, false);
             trackTitle.FontSize = 17;
             trackTitle.FontWeight = FontWeights.SemiBold;
             trackTitle.Foreground = Ink("#FAF5FF");
             trackTitle.TextTrimming = TextTrimming.CharacterEllipsis;
             trackTitle.TextWrapping = TextWrapping.NoWrap;
-            artist.FontSize = 11;
+            trackTitle.VerticalAlignment = VerticalAlignment.Center;
+            artist.FontSize = 13;
             artist.Foreground = Ink("#E4D9EC");
             artist.TextTrimming = TextTrimming.CharacterEllipsis;
             artist.TextWrapping = TextWrapping.NoWrap;
             artist.VerticalAlignment = VerticalAlignment.Center;
-            progress.FontSize = 10;
-            progress.Foreground = Ink("#C6B7D4");
-            progress.HorizontalAlignment = HorizontalAlignment.Right;
-            progress.VerticalAlignment = VerticalAlignment.Center;
-            progress.Margin = new Thickness(12, 0, 0, 0);
+            currentTime.FontSize = totalTime.FontSize = 10.5;
+            currentTime.Foreground = totalTime.Foreground = Ink("#C6B7D4");
+            currentTime.VerticalAlignment = totalTime.VerticalAlignment = VerticalAlignment.Center;
+            totalTime.TextAlignment = TextAlignment.Right;
             var trackInfo = new Grid();
-            trackInfo.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            trackInfo.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            for (var column = 0; column < 3; column++)
+                trackInfo.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 0 });
             trackInfo.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             trackInfo.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            trackInfo.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            trackTitle.Margin = new Thickness(0, 0, 12, 0);
-            trackInfo.Children.Add(trackTitle);
-
-            Grid.SetRow(artist, 1);
-            trackInfo.Children.Add(artist);
-
-            playbackConnectionStatus.FontSize = 10;
+            var trackLabels = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            trackLabels.Children.Add(trackTitle);
+            trackLabels.Children.Add(artist);
+            trackInfo.Children.Add(trackLabels);
             playbackConnectionStatus.VerticalAlignment = VerticalAlignment.Center;
-            var connectionIcon = Glyph("bluetooth", Brushes.White, 11);
-            connectionIcon.SetBinding(System.Windows.Shapes.Shape.StrokeProperty,
-                new Binding("Foreground") { Source = playbackConnectionStatus });
-            connectionIcon.Margin = new Thickness(0, 0, 5, 0);
+            playbackConnectionStatus.FontSize = 12;
+            playbackConnectionIcon = Glyph("bluetooth", Ink("#78DCC1"), 13);
+            playbackConnectionIcon.Margin = new Thickness(0, 0, 6, 0);
             var badgeContent = new StackPanel { Orientation = Orientation.Horizontal };
-            badgeContent.Children.Add(connectionIcon);
+            badgeContent.Children.Add(playbackConnectionIcon);
             badgeContent.Children.Add(playbackConnectionStatus);
-            playbackConnectionBadge.CornerRadius = new CornerRadius(11);
-            playbackConnectionBadge.BorderThickness = new Thickness(1);
-            playbackConnectionBadge.Padding = new Thickness(7, 2, 7, 2);
+            playbackConnectionBadge.Background = Brushes.Transparent;
+            playbackConnectionBadge.BorderBrush = Brushes.Transparent;
+            playbackConnectionBadge.BorderThickness = new Thickness(0);
+            playbackConnectionBadge.Padding = new Thickness(0);
             playbackConnectionBadge.HorizontalAlignment = HorizontalAlignment.Right;
-            playbackConnectionBadge.VerticalAlignment = VerticalAlignment.Top;
+            playbackConnectionBadge.VerticalAlignment = VerticalAlignment.Center;
             playbackConnectionBadge.Child = badgeContent;
-            Grid.SetColumn(playbackConnectionBadge, 1);
+            Grid.SetColumn(playbackConnectionBadge, 2);
             trackInfo.Children.Add(playbackConnectionBadge);
-            Grid.SetRow(progress, 1);
-            Grid.SetColumn(progress, 1);
-            trackInfo.Children.Add(progress);
-            playbackProgress.Foreground = new LinearGradientBrush(Color.FromRgb(198, 126, 240), Color.FromRgb(230, 183, 255), 0);
-            playbackProgress.Background = Ink("#665573");
+            var trackActions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center };
+            trackActions.Children.Add(settingsPreviousTrack);
+            trackActions.Children.Add(settingsPlayPause);
+            trackActions.Children.Add(settingsNextTrack);
+            Grid.SetColumn(trackActions, 1);
+            trackInfo.Children.Add(trackActions);
+            playbackProgress.Foreground = Ink("#D99AF0");
+            playbackProgress.Background = Ink("#675773");
             playbackProgress.BorderThickness = new Thickness(0);
-            playbackProgress.Margin = new Thickness(0, 5, 0, 0);
+            playbackProgress.VerticalAlignment = VerticalAlignment.Center;
             playbackProgress.Template = ControlTheme.PlaybackProgress;
             AutomationProperties.SetName(playbackProgress, "歌曲播放进度");
-            Grid.SetRow(playbackProgress, 2);
-            Grid.SetColumnSpan(playbackProgress, 2);
-            trackInfo.Children.Add(playbackProgress);
+            playbackProgressHost.Children.Add(playbackProgress);
+            playbackProgressHost.Children.Add(playbackProgressThumb);
+            playbackProgressHost.SizeChanged += delegate { UpdatePlaybackProgressThumb(); };
+            playbackProgressHost.MouseEnter += delegate
+            {
+                if (playbackProgress.Visibility == Visibility.Visible) playbackProgressThumb.Visibility = Visibility.Visible;
+            };
+            playbackProgressHost.MouseLeave += delegate { playbackProgressThumb.Visibility = Visibility.Collapsed; };
+            var progressArea = new Grid { Margin = new Thickness(0, 4, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            progressArea.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            progressArea.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 24 });
+            progressArea.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            currentTime.Margin = new Thickness(0, 0, 9, 0);
+            totalTime.Margin = new Thickness(9, 0, 0, 0);
+            progressArea.Children.Add(currentTime);
+            Grid.SetColumn(playbackProgressHost, 1);
+            progressArea.Children.Add(playbackProgressHost);
+            Grid.SetColumn(totalTime, 2);
+            progressArea.Children.Add(totalTime);
+            Grid.SetRow(progressArea, 1);
+            Grid.SetColumnSpan(progressArea, 3);
+            trackInfo.Children.Add(progressArea);
             var trackStrip = new Border { Background = new LinearGradientBrush(Color.FromRgb(61, 40, 81), Color.FromRgb(40, 32, 52), 15),
-                CornerRadius = new CornerRadius(8), MinHeight = 64,
-                Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(0, 0, 0, 8), Child = trackInfo };
+                CornerRadius = new CornerRadius(8), MinHeight = 68,
+                Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 0, 8), Child = trackInfo };
             Grid.SetRow(trackStrip, 1);
             root.Children.Add(trackStrip);
 
@@ -1588,6 +1625,26 @@ namespace LyricConnector
             return button;
         }
 
+        private static Button TrackActionButton(string name, string glyph, RoutedEventHandler action, bool emphasized)
+        {
+            var button = Button("", action);
+            button.Content = null;
+            button.Tag = ControlTheme.Glyph(glyph);
+            button.Width = emphasized ? 36 : 32;
+            button.Height = button.MinHeight = button.Width;
+            button.Padding = new Thickness(0);
+            button.Margin = new Thickness(3, 0, 3, 0);
+            button.Foreground = Ink(emphasized ? "#382448" : "#F4EAF8");
+            button.Background = emphasized ? Ink("#E2B7F1") : Brushes.Transparent;
+            button.BorderBrush = emphasized ? Ink("#E2B7F1") : Brushes.Transparent;
+            button.BorderThickness = new Thickness(1);
+            button.ClearValue(Control.TemplateProperty);
+            button.Style = emphasized ? ControlTheme.PlaybackPrimaryButton : ControlTheme.PlaybackGhostButton;
+            button.ToolTip = name;
+            AutomationProperties.SetName(button, name);
+            return button;
+        }
+
         private static Button PrimaryButton(string text, RoutedEventHandler action)
         {
             var button = Button(text, action);
@@ -1737,11 +1794,11 @@ namespace LyricConnector
             connect.IsEnabled = !refreshingDevices && (activeSource != null || (!connectionBusy && devices.SelectedItem != null));
             var connected = activeSource != null && !connectionBusy;
             playbackConnectionStatus.Text = connected ? "已连接" : connectionBusy ? "处理中" : reconnectTimer.IsEnabled ? "等待重连" : "未连接";
-            playbackConnectionStatus.Foreground = connected ? Ink("#DDF4E3") : Ink("#D1C5DD");
-            playbackConnectionBadge.Background = connected
-                ? new LinearGradientBrush(Color.FromRgb(35, 106, 61), Color.FromRgb(35, 82, 53), 0)
-                : (Brush)Ink("#4D425D");
-            playbackConnectionBadge.BorderBrush = connected ? Ink("#438954") : Ink("#6A5B7C");
+            playbackConnectionStatus.Foreground = connected ? Ink("#E7DDED") : Ink("#C6B7D4");
+            playbackConnectionIcon.Stroke = connected ? Ink("#78DCC1") : Ink("#A89DB3");
+            playbackConnectionBadge.Background = Brushes.Transparent;
+            playbackConnectionBadge.BorderBrush = Brushes.Transparent;
+            playbackConnectionBadge.BorderThickness = new Thickness(0);
             playbackConnectionBadge.ToolTip = "手机蓝牙连接：" + playbackConnectionStatus.Text;
             AutomationProperties.SetName(playbackConnectionBadge, playbackConnectionBadge.ToolTip.ToString());
             connectionState.Text = connected ? "● 已连接" + (model.Player.Length > 0 ? " · " + DisplayPlayerName(model.Player) : "")
@@ -1941,7 +1998,15 @@ namespace LyricConnector
                     var pending = FindLyricsAsync(false, "", "", false);
                 }
             }
-            else { trackTitle.Text = "等待歌曲信息"; trackTitle.ToolTip = null; artist.Text = "连接 iPhone 后播放音乐"; artist.ToolTip = null; progress.Text = ""; }
+            else
+            {
+                trackTitle.Text = "等待歌曲信息";
+                trackTitle.ToolTip = null;
+                artist.Text = "连接 iPhone 后播放音乐";
+                artist.ToolTip = null;
+                currentTime.Text = "";
+                totalTime.Text = "";
+            }
             UpdateConnectionControls();
             UpdateLyricActions();
             Render();
@@ -2283,6 +2348,14 @@ namespace LyricConnector
             preview.SetKaraokeProgress(model.Ready && lyrics != null && lyrics.Synced ? value : 1);
         }
 
+        private void UpdatePlaybackProgressThumb()
+        {
+            var maximum = Math.Max(0, playbackProgressHost.ActualWidth - playbackProgressThumb.Width);
+            var left = Math.Max(0, Math.Min(maximum,
+                playbackProgressHost.ActualWidth * playbackProgress.Value - playbackProgressThumb.Width / 2));
+            playbackProgressThumb.RenderTransform = new TranslateTransform(left, 0);
+        }
+
         private void Render()
         {
             UpdatePlaybackControls();
@@ -2292,6 +2365,8 @@ namespace LyricConnector
                 overlay.SetProgress(0, 0);
                 playbackProgress.Value = 0;
                 playbackProgress.Visibility = Visibility.Hidden;
+                playbackProgressThumb.Visibility = Visibility.Collapsed;
+                UpdatePlaybackProgressThumb();
                 SetLyricProgress(1);
                 SetLyricText("", model.Status, OverlayConnectionHint());
                 return;
@@ -2300,10 +2375,12 @@ namespace LyricConnector
             overlay.SetProgress(position, model.Track.Duration);
             playbackProgress.Visibility = model.Track.Duration > 0 ? Visibility.Visible : Visibility.Hidden;
             playbackProgress.Value = model.Track.Duration > 0 ? Math.Max(0, Math.Min(1, position / model.Track.Duration)) : 0;
+            currentTime.Text = String.Format(CultureInfo.InvariantCulture, "{0:mm\\:ss}", TimeSpan.FromSeconds(position));
+            totalTime.Text = model.Track.Duration > 0
+                ? String.Format(CultureInfo.InvariantCulture, "{0:mm\\:ss}", TimeSpan.FromSeconds(model.Track.Duration)) : "";
+            if (playbackProgress.Visibility != Visibility.Visible) playbackProgressThumb.Visibility = Visibility.Collapsed;
+            UpdatePlaybackProgressThumb();
             var title = trackTitle.Text;
-            progress.Text = model.Track.Duration > 0
-                ? String.Format(CultureInfo.InvariantCulture, "{0:mm\\:ss} / {1:mm\\:ss}", TimeSpan.FromSeconds(position), TimeSpan.FromSeconds(model.Track.Duration))
-                : String.Format(CultureInfo.InvariantCulture, "已播放 {0:mm\\:ss}", TimeSpan.FromSeconds(position));
             if (selected != null && selected.instrumental) { UpdateLyricsViewer(-1); SetLyricProgress(1); SetLyricText("", title, "纯音乐"); return; }
             if (lyrics == null) { UpdateLyricsViewer(-1); SetLyricProgress(1); SetLyricText("", title, OverlayLyricsHint()); return; }
             if (!lyrics.Synced) { UpdateLyricsViewer(-1); SetLyricProgress(1); SetLyricText("", title, "此歌词为纯文本 · 可在桌面查看全文"); return; }
@@ -2338,6 +2415,23 @@ namespace LyricConnector
             overlay.SetPlaybackControls(paused,
                 connected && source.SupportsRemoteCommand(RemoteCommand.PreviousTrack), command, canToggle,
                 connected && source.SupportsRemoteCommand(RemoteCommand.NextTrack));
+            settingsPreviousTrack.IsEnabled = connected && source.SupportsRemoteCommand(RemoteCommand.PreviousTrack);
+            settingsNextTrack.IsEnabled = connected && source.SupportsRemoteCommand(RemoteCommand.NextTrack);
+            settingsPlayPause.IsEnabled = canToggle;
+            settingsPlayPauseCommand = command;
+            var showPlay = !connected || paused;
+            if (settingsPlayPauseShowsPlay != showPlay)
+            {
+                settingsPlayPauseShowsPlay = showPlay;
+                settingsPlayPause.Tag = ControlTheme.Glyph(showPlay ? "play" : "pause");
+            }
+            var playPauseName = !connected ? "连接 iPhone 后可控制播放" : paused ? "继续播放" : "暂停播放";
+            settingsPlayPause.ToolTip = playPauseName;
+            AutomationProperties.SetName(settingsPlayPause, playPauseName);
+            settingsPreviousTrack.ToolTip = connected && settingsPreviousTrack.IsEnabled ? "播放上一首" : "当前播放器不支持上一首";
+            settingsNextTrack.ToolTip = connected && settingsNextTrack.IsEnabled ? "播放下一首" : "当前播放器不支持下一首";
+            AutomationProperties.SetName(settingsPreviousTrack, settingsPreviousTrack.ToolTip.ToString());
+            AutomationProperties.SetName(settingsNextTrack, settingsNextTrack.ToolTip.ToString());
         }
 
         private async void SendRemoteCommand(byte command)

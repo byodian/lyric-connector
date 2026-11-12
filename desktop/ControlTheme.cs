@@ -198,6 +198,78 @@ namespace LyricConnector
     </Setter>
   </Style>
 
+  <Style x:Key='PlaybackGhostButton' TargetType='{x:Type Button}'>
+    <Setter Property='Background' Value='Transparent'/>
+    <Setter Property='BorderBrush' Value='Transparent'/>
+    <Setter Property='Foreground' Value='#F4EAF8'/>
+    <Setter Property='BorderThickness' Value='1'/>
+    <Setter Property='FocusVisualStyle' Value='{x:Null}'/>
+    <Setter Property='Template'>
+      <Setter.Value>
+        <ControlTemplate TargetType='{x:Type Button}'>
+          <Border x:Name='surface' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
+                  BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='16'>
+            <Path Data='{TemplateBinding Tag}' Stroke='{TemplateBinding Foreground}' StrokeThickness='1.6'
+                  StrokeStartLineCap='Round' StrokeEndLineCap='Round' StrokeLineJoin='Round'
+                  Width='14' Height='14' Stretch='Uniform' HorizontalAlignment='Center' VerticalAlignment='Center'/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property='IsMouseOver' Value='True'>
+              <Setter TargetName='surface' Property='Background' Value='#51405F'/>
+              <Setter TargetName='surface' Property='BorderBrush' Value='#685675'/>
+            </Trigger>
+            <Trigger Property='IsPressed' Value='True'>
+              <Setter TargetName='surface' Property='Background' Value='#6B557A'/>
+              <Setter TargetName='surface' Property='BorderBrush' Value='#806A8D'/>
+            </Trigger>
+            <Trigger Property='IsKeyboardFocused' Value='True'>
+              <Setter TargetName='surface' Property='BorderBrush' Value='#E7C8F7'/>
+            </Trigger>
+            <Trigger Property='IsEnabled' Value='False'>
+              <Setter TargetName='surface' Property='Opacity' Value='0.4'/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key='PlaybackPrimaryButton' TargetType='{x:Type Button}'>
+    <Setter Property='Background' Value='#E2B7F1'/>
+    <Setter Property='BorderBrush' Value='#E2B7F1'/>
+    <Setter Property='Foreground' Value='#382448'/>
+    <Setter Property='BorderThickness' Value='1'/>
+    <Setter Property='FocusVisualStyle' Value='{x:Null}'/>
+    <Setter Property='Template'>
+      <Setter.Value>
+        <ControlTemplate TargetType='{x:Type Button}'>
+          <Border x:Name='surface' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
+                  BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='18'>
+            <Path Data='{TemplateBinding Tag}' Stroke='{TemplateBinding Foreground}' StrokeThickness='1.8'
+                  StrokeStartLineCap='Round' StrokeEndLineCap='Round' StrokeLineJoin='Round'
+                  Width='15' Height='15' Stretch='Uniform' HorizontalAlignment='Center' VerticalAlignment='Center'/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property='IsMouseOver' Value='True'>
+              <Setter TargetName='surface' Property='Background' Value='#F0D5FA'/>
+              <Setter TargetName='surface' Property='BorderBrush' Value='#F0D5FA'/>
+            </Trigger>
+            <Trigger Property='IsPressed' Value='True'>
+              <Setter TargetName='surface' Property='Background' Value='#C997DB'/>
+              <Setter TargetName='surface' Property='BorderBrush' Value='#C997DB'/>
+            </Trigger>
+            <Trigger Property='IsKeyboardFocused' Value='True'>
+              <Setter TargetName='surface' Property='BorderBrush' Value='#FFF4FF'/>
+            </Trigger>
+            <Trigger Property='IsEnabled' Value='False'>
+              <Setter TargetName='surface' Property='Opacity' Value='0.42'/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style x:Key='VerticalScrollBar' TargetType='{x:Type ScrollBar}'>
     <Setter Property='Width' Value='8'/>
     <Setter Property='MinWidth' Value='8'/>
@@ -260,6 +332,8 @@ namespace LyricConnector
         public static Style Input { get { return (Style)resources["Input"]; } }
         public static Style Select { get { return (Style)resources["Select"]; } }
         public static Style Switch { get { return (Style)resources["Switch"]; } }
+        public static Style PlaybackGhostButton { get { return (Style)resources["PlaybackGhostButton"]; } }
+        public static Style PlaybackPrimaryButton { get { return (Style)resources["PlaybackPrimaryButton"]; } }
         public static Style VerticalScrollBar { get { return (Style)resources["VerticalScrollBar"]; } }
         public static ControlTemplate Candidates { get { return (ControlTemplate)resources["Candidates"]; } }
         public static ControlTemplate PlaybackProgress { get { return (ControlTemplate)resources["PlaybackProgress"]; } }
@@ -277,6 +351,10 @@ namespace LyricConnector
                 case "music": path = "M 6 14 L 6 3 L 15 1 L 15 12 M 6 14 A 2.6 2 0 1 1 1 14 A 2.6 2 0 1 1 6 14 M 15 12 A 2.6 2 0 1 1 10 12 A 2.6 2 0 1 1 15 12 M 6 6 L 15 4"; break;
                 case "phone": path = "M 4 1 L 13 1 Q 14 1 14 2 L 14 17 Q 14 18 13 18 L 4 18 Q 3 18 3 17 L 3 2 Q 3 1 4 1 Z M 7 15 L 10 15"; break;
                 case "bluetooth": path = "M 7 1 L 13 6 L 2 14 M 7 1 L 7 17 L 13 12 L 2 4"; break;
+                case "previous": path = "M 7 3 L 7 15 M 15 3 L 7 9 L 15 15 Z"; break;
+                case "play": path = "M 5 3 L 14 9 L 5 15 Z"; break;
+                case "pause": path = "M 5 3 L 5 15 M 12 3 L 12 15"; break;
+                case "next": path = "M 4 3 L 12 9 L 4 15 Z M 13 3 L 13 15"; break;
                 case "minimize": path = "M 2 9 L 14 9"; break;
                 case "maximize": path = "M 3 3 L 13 3 L 13 13 L 3 13 Z"; break;
                 case "restore": path = "M 6 3 L 14 3 L 14 11 M 3 6 L 11 6 L 11 14 L 3 14 Z"; break;
