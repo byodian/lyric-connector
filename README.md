@@ -30,7 +30,11 @@ These examples use the same light background with the pointer over the overlay. 
 | --- | --- |
 | ![Click-through off, with controls and a translucent panel visible under the pointer](docs/desktop-hover-mouse-through-off.png) | ![Click-through on, with controls hidden and the background transparent at the same pointer position](docs/desktop-hover-mouse-through-on.png) |
 
-The desktop control window has separate pages for music and lyrics and for overlay settings:
+On first launch, the Spotlight Tour highlights the next real action and follows pairing, device discovery, selection, and connection:
+
+![First-run connection guide highlighting Windows Bluetooth settings](docs/desktop-connection-tour.png)
+
+The music and lyrics page keeps the iPhone selector and connection actions visible alongside playback and lyric matching:
 
 ![Music and lyrics page with iPhone connection, playback status, and lyric matching](docs/desktop-control.png)
 

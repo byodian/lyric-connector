@@ -1,5 +1,5 @@
 #define AppName "Lyric Connector"
-#define AppVersion "0.2.8"
+#define AppVersion "0.2.9"
 #define AppPublisher "Lyric Connector"
 
 [Setup]
@@ -22,7 +22,7 @@ SetupIconFile=..\desktop\assets\lyric-connector.ico
 UninstallDisplayIcon={app}\LyricConnector.exe
 OutputDir=..\artifacts\installer
 OutputBaseFilename=LyricConnector-Setup-{#AppVersion}-x64
-VersionInfoVersion=0.2.8.0
+VersionInfoVersion=0.2.9.0
 VersionInfoProductVersion={#AppVersion}
 VersionInfoProductName={#AppName}
 VersionInfoDescription={#AppName} desktop lyrics

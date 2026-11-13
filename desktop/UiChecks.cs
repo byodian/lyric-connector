@@ -45,6 +45,138 @@ namespace LyricConnector
             Console.WriteLine("PASS UI: " + name);
         }
 
+        private static int VisibleSpotlightButtons(ControlWindow window)
+        {
+            return Descendants(Field<Border>(window, "spotlightCallout"))
+                .OfType<Button>().Count(button => button.IsVisible);
+        }
+
+        private static void CheckSpotlightLayout(ControlWindow window, string step)
+        {
+            window.UpdateLayout();
+            Invoke(window, "UpdateSpotlight");
+            window.UpdateLayout();
+            var host = Field<Grid>(window, "spotlightHost");
+            var callout = Field<Border>(window, "spotlightCallout");
+            var target = (FrameworkElement)Invoke(window, "ConnectionTourTarget");
+            var calloutBounds = callout.TransformToAncestor(host).TransformBounds(new Rect(callout.RenderSize));
+            var targetBounds = target.TransformToAncestor(host).TransformBounds(new Rect(target.RenderSize));
+            targetBounds.Inflate(6, 6);
+            Check(callout.MaxWidth <= 320 && calloutBounds.Width <= 320.5
+                && calloutBounds.Left >= -0.5 && calloutBounds.Top >= -0.5
+                && calloutBounds.Right <= host.ActualWidth + 0.5 && calloutBounds.Bottom <= host.ActualHeight + 0.5,
+                step + " callout stays within the window at 320px maximum width");
+            Check(!calloutBounds.IntersectsWith(targetBounds), step + " callout stays clear of its highlighted target");
+        }
+
+        private static void CheckSpotlightTour(ControlWindow window, DeviceChoice fixtureDevice, string screenshots)
+        {
+            var settings = Field<DesktopSettings>(window, "settings");
+            var devices = Field<ComboBox>(window, "devices");
+            var guide = Field<Border>(window, "connectionGuidePanel");
+            var guideDescription = Field<TextBlock>(window, "connectionGuideDescription");
+            var bluetoothSettings = Field<Button>(window, "openBluetoothSettingsButton");
+            var help = Field<Button>(window, "connectionHelpButton");
+            var skip = Field<Button>(window, "spotlightSkip");
+            var previous = Field<Button>(window, "spotlightPrevious");
+            var action = Field<Button>(window, "spotlightAction");
+            var connect = Field<Button>(window, "connect");
+            if (Field<bool>(window, "connectionTourActive")) Invoke(window, "DismissConnectionTour");
+
+            settings.ConnectionTourCompleted = true;
+            devices.ItemsSource = new DeviceChoice[0];
+            devices.SelectedIndex = -1;
+            guide.Visibility = Visibility.Collapsed;
+            help.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(guide.Visibility == Visibility.Visible && !Field<bool>(window, "connectionTourActive"),
+                "connection help opens its normal inline instructions outside the tour");
+            help.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            help.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Field<Button>(window, "connectionTourRestartButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(Field<bool>(window, "connectionTourActive") && Field<int>(window, "connectionTourStep") == 1,
+                "the inline help can manually restart the tour when startup display is disabled");
+            Check(Object.ReferenceEquals(Invoke(window, "ConnectionTourTarget"), bluetoothSettings)
+                && guide.Visibility == Visibility.Visible && guideDescription.Visibility == Visibility.Collapsed
+                && Field<Button>(window, "connectionTourRestartButton").Visibility == Visibility.Collapsed
+                && !Object.ReferenceEquals(bluetoothSettings.Parent, Field<Grid>(window, "connectionDeviceRow")),
+                "step 1 highlights the Bluetooth settings button inside connection help and hides duplicate instructions");
+            Check(skip.IsVisible && !previous.IsVisible && !action.IsVisible && VisibleSpotlightButtons(window) == 1,
+                "step 1 shows only the weak skip entry until pairing returns");
+            CheckSpotlightLayout(window, "step 1");
+            ControlWindow.CaptureWindow(window, Path.Combine(screenshots, "spotlight-tour-step-1.png"));
+
+            skip.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(!Field<bool>(window, "connectionTourActive")
+                && Field<Canvas>(window, "spotlightLayer").Visibility == Visibility.Collapsed
+                && guide.Visibility == Visibility.Visible && guideDescription.Visibility == Visibility.Visible
+                && Field<Button>(window, "refreshDevices").IsEnabled,
+                "skipping closes the overlay, restores normal help and leaves page controls usable");
+            help.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            help.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Field<Button>(window, "connectionTourRestartButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            typeof(ControlWindow).GetField("bluetoothSettingsReturned", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(window, true);
+            Invoke(window, "UpdateConnectionControls");
+            Check(action.IsVisible && (string)action.Content == "已完成" && VisibleSpotlightButtons(window) == 2,
+                "step 1 offers one completion confirmation only after returning without a discovered device");
+            CheckSpotlightLayout(window, "step 1 confirmation");
+            action.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+            Check(Field<int>(window, "connectionTourStep") == 2
+                && Object.ReferenceEquals(Invoke(window, "ConnectionTourTarget"), Field<Grid>(window, "connectionDeviceRow"))
+                && !action.IsVisible && previous.IsVisible && VisibleSpotlightButtons(window) == 2,
+                "step 2 highlights the real refresh and selection row without a next button");
+            CheckSpotlightLayout(window, "step 2");
+            ControlWindow.CaptureWindow(window, Path.Combine(screenshots, "spotlight-tour-step-2.png"));
+            previous.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            devices.ItemsSource = new[] { fixtureDevice };
+            devices.SelectedIndex = 0;
+            Invoke(window, "AdvanceConnectionTourAfterDeviceRefresh", devices.Items.Count);
+            Check(Field<int>(window, "connectionTourStep") == 3
+                && Object.ReferenceEquals(Invoke(window, "ConnectionTourTarget"), connect)
+                && !action.IsVisible && !previous.IsVisible && connect.IsEnabled && VisibleSpotlightButtons(window) == 1,
+                "device discovery and selection advance to the real connect button");
+            CheckSpotlightLayout(window, "step 3");
+            ControlWindow.CaptureWindow(window, Path.Combine(screenshots, "spotlight-tour-step-3.png"));
+
+            typeof(ControlWindow).GetField("connectionBusy", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(window, true);
+            Invoke(window, "UpdateConnectionControls");
+            Check(Field<int>(window, "connectionTourStep") == 3 && !connect.IsEnabled
+                && VisibleSpotlightButtons(window) == 1,
+                "connecting keeps the tour on step 3 and disables the real button while waiting");
+            typeof(ControlWindow).GetField("connectionBusy", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(window, false);
+            var model = Field<PlaybackModel>(window, "model");
+            Invoke(window, "Accept", new SourceUpdate { Kind = UpdateKind.Disconnected,
+                Revision = model.Revision + 1, Message = "测试连接失败" });
+            Check(Field<bool>(window, "connectionTourActive") && Field<int>(window, "connectionTourStep") == 3
+                && Field<bool>(window, "connectionTourConnectFailed") && connect.IsEnabled
+                && Field<TextBlock>(window, "spotlightDescription").Text.Contains("测试连接失败")
+                && previous.IsVisible && VisibleSpotlightButtons(window) == 2,
+                "connection failure stays on step 3, shows the error, enables retry and allows changing device");
+            CheckSpotlightLayout(window, "step 3 retry");
+            ControlWindow.CaptureWindow(window, Path.Combine(screenshots, "spotlight-tour-step-3-retry.png"));
+            previous.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(Field<int>(window, "connectionTourStep") == 2 && devices.SelectedItem == null
+                && Object.ReferenceEquals(Invoke(window, "ConnectionTourTarget"), Field<Grid>(window, "connectionDeviceRow"))
+                && !action.IsVisible && VisibleSpotlightButtons(window) == 1,
+                "previous appears after failure and clears selection so another device can be chosen");
+            devices.SelectedIndex = 0;
+            var activeSourceField = typeof(ControlWindow).GetField("activeSource", BindingFlags.Instance | BindingFlags.NonPublic);
+            activeSourceField.SetValue(window, new AmsSource(fixtureDevice, update => { }, model.Revision));
+            Invoke(window, "Accept", new SourceUpdate { Kind = UpdateKind.Connected,
+                Revision = model.Revision + 1, Message = "测试连接成功" });
+            Check(!Field<bool>(window, "connectionTourActive")
+                && Field<Canvas>(window, "spotlightLayer").Visibility == Visibility.Collapsed
+                && guide.Visibility == Visibility.Visible,
+                "successful connection closes the tour automatically and restores normal help");
+            activeSourceField.SetValue(window, null);
+            typeof(ControlWindow).GetField("connectionBusy", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(window, false);
+            Invoke(window, "UpdateConnectionControls");
+        }
+
         private static void Enter(ControlWindow window, TextBox input, string text)
         {
             input.Text = text;
@@ -72,6 +204,7 @@ namespace LyricConnector
                     var model = Field<PlaybackModel>(window, "model");
                     var reconnect = Field<DispatcherTimer>(window, "reconnectTimer");
                     var fixtureDevice = new DeviceChoice { Id = "ui-fixture-device", Name = "iPhone 15 Pro" };
+                    CheckSpotlightTour(window, fixtureDevice, screenshots);
                     settings.DeviceId = fixtureDevice.Id;
                     await (Task)Invoke(window, "DisconnectAsync");
                     Invoke(window, "StartAutoReconnect");
@@ -96,15 +229,11 @@ namespace LyricConnector
                     Check(Field<Border>(window, "connectionGuidePanel").Visibility == Visibility.Collapsed,
                         "successful connection collapses first-use connection help");
                     var connectionDetails = Field<StackPanel>(window, "connectionDetails");
-                    var manageConnection = Field<Button>(window, "manageConnection");
-                    Check(connectionDetails.Visibility == Visibility.Collapsed && manageConnection.IsVisible,
-                        "connected device controls collapse into a status summary");
+                    Check(connectionDetails.Visibility == Visibility.Visible && devices.IsVisible,
+                        "device selector remains visible after connection");
                     Check(Field<TextBlock>(window, "playbackConnectionStatus").Text == "已连接",
                         "playback panel shows the actual Bluetooth connection state");
-                    manageConnection.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                    Check(connectionDetails.Visibility == Visibility.Visible && !devices.IsEnabled,
-                        "device management can reopen without interrupting the connection");
-                    manageConnection.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Check(!devices.IsEnabled, "connected device selector stays visible but disabled");
 
                     var snapshot = new SourceUpdate { Kind = UpdateKind.Snapshot, Revision = model.Revision + 1,
                         Track = new Track { Title = "爱是怀疑", Artist = "Eason Chan", Album = "", Duration = 273 },
@@ -370,7 +499,7 @@ namespace LyricConnector
                     Check(musicPage.IsVisible && displayPage.IsVisible && displayBounds.Left > musicBounds.Right
                         && Field<Border>(window, "settingsTabs").Visibility == Visibility.Collapsed,
                         "maximized window presents music and floating settings side by side");
-                    var surface = (Border)window.Content;
+                    var surface = (Border)Field<Grid>(window, "spotlightHost").Children[0];
                     var root = (Grid)surface.Child;
                     Check(Math.Abs(root.ActualWidth - (surface.ActualWidth - 50)) < 1
                         && root.Margin.Left == 24 && root.Margin.Right == 24,
@@ -380,12 +509,10 @@ namespace LyricConnector
                         "playback panel stretches across the complete content width");
                     Check(Math.Abs(musicPage.ActualWidth / (musicPage.ActualWidth + displayPage.ActualWidth) - 0.55) < 0.001,
                         "wide columns divide available width in a 55 to 45 ratio");
-                    manageConnection.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     window.UpdateLayout();
                     Check(((FrameworkElement)devices.Parent).ActualWidth <= 640
                         && Field<StackPanel>(window, "connectionDetails").ActualWidth > ((FrameworkElement)devices.Parent).ActualWidth,
                         "device operations stay bounded inside a full width connection section");
-                    manageConnection.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     Check(((FrameworkElement)((FrameworkElement)Field<TextBox>(window, "searchTitle").Parent).Parent).ActualWidth <= 720
                         && Field<TextBox>(window, "searchTitle").ActualWidth <= 360
                         && Field<TextBox>(window, "searchArtist").ActualWidth <= 360,

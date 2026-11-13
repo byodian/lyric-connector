@@ -522,6 +522,12 @@ namespace LyricConnector
         private const int MaxLyricsRetries = 3;
         private const double CandidateRowHeight = 40;
         private const int MaxVisibleCandidates = 5;
+        private const int TourPairDevice = 1;
+        private const int TourSelectDevice = 2;
+        private const int TourConnectDevice = 3;
+        private const int StaleBluetoothPairingFailureThreshold = 3;
+        private const string DefaultConnectionGuideDescription = "首次连接时，先与 iPhone 完成蓝牙配对；返回后刷新设备列表并选择 iPhone，再点击连接。连接失败时可检查蓝牙状态后重试。";
+        private const string StaleBluetoothPairingInstructions = "连接连续失败，可能是 Windows 保存的旧配对状态失效。请打开 Windows 蓝牙设置，移除或忽略 iPhone；如果 iPhone 仍保存这台电脑，也请在手机蓝牙设置中忽略它。然后重新配对，返回应用刷新设备列表并重试连接。";
         private readonly PlaybackModel model = new PlaybackModel(Stopwatch.Frequency);
         private readonly DesktopSettings settings;
         private readonly string settingsPath;
@@ -560,10 +566,10 @@ namespace LyricConnector
             HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
             Visibility = Visibility.Collapsed, IsHitTestVisible = false };
         private readonly TextBlock lyricSource = new TextBlock();
-        private readonly TextBlock connectionState = new TextBlock();
         private readonly StackPanel connectionDetails = new StackPanel();
-        private readonly Button manageConnection;
-        private bool connectionDetailsExpanded;
+        private readonly Button connectionHelpButton;
+        private Button openBluetoothSettingsButton;
+        private Grid connectionDeviceRow;
         private readonly Button refreshDevices;
         private readonly Button connect;
         private readonly Button search;
@@ -580,6 +586,33 @@ namespace LyricConnector
         private readonly Border settingsDivider = new Border { Width = 1, Background = Ink("#E3DEE9"), Margin = new Thickness(16, 0, 16, 0) };
         private bool displaySettingsSelected;
         private readonly Border connectionGuidePanel;
+        private TextBlock connectionGuideDescription;
+        private Button connectionTourRestartButton;
+        private readonly Canvas spotlightLayer = new Canvas { ClipToBounds = true, Visibility = Visibility.Collapsed };
+        private Grid spotlightHost;
+        private Border spotlightTop;
+        private Border spotlightLeft;
+        private Border spotlightRight;
+        private Border spotlightBottom;
+        private Border spotlightRing;
+        private Border spotlightCallout;
+        private TextBlock spotlightProgress;
+        private TextBlock spotlightTitle;
+        private TextBlock spotlightDescription;
+        private Button spotlightPrevious;
+        private Button spotlightAction;
+        private Button spotlightSkip;
+        private bool connectionTourActive;
+        private bool connectionTourDismissedThisRun;
+        private bool bluetoothSettingsLaunchPending;
+        private bool bluetoothSettingsWindowOpened;
+        private bool bluetoothSettingsReturned;
+        private bool connectionTourConnectFailed;
+        private bool connectionGuideVisibleBeforeTour;
+        private Visibility connectionGuideDescriptionVisibilityBeforeTour;
+        private string connectionTourError = "";
+        private int connectionTourStep;
+        private readonly Stack<int> connectionTourHistory = new Stack<int>();
         private readonly CheckBox clickThrough = new CheckBox { Content = "鼠标穿透（Ctrl + Alt + L 切换）" };
         private readonly TextBlock offsetLabel = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 76, TextAlignment = TextAlignment.Center };
         private CancellationTokenSource sourceCancellation;
@@ -588,6 +621,8 @@ namespace LyricConnector
         private bool manuallyDisconnected;
         private bool connectionBusy;
         private bool refreshingDevices;
+        private bool staleBluetoothPairingRepairRequired;
+        private int staleBluetoothPairingFailureCount;
         private bool searchingLyrics;
         private AmsSource activeSource;
         private CancellationTokenSource queryCancellation;
@@ -680,9 +715,9 @@ namespace LyricConnector
             {
                 if (args.Button == System.Windows.Forms.MouseButtons.Left) ShowControlWindow();
             };
-            Width = 700;
-            Height = 790;
             MinWidth = 620;
+            Width = MinWidth;
+            Height = 790;
             MinHeight = 620;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             WindowStyle = WindowStyle.None;
@@ -842,36 +877,22 @@ namespace LyricConnector
             displayPage = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
             musicPage.Resources.Add(typeof(ScrollBar), ControlTheme.VerticalScrollBar);
             displayPage.Resources.Add(typeof(ScrollBar), ControlTheme.VerticalScrollBar);
+            musicPage.ScrollChanged += delegate { ScheduleSpotlightUpdate(); };
             var musicContent = new StackPanel { Margin = new Thickness(0, 0, 8, 4) };
-            connectionState.FontSize = 12;
-            connectionState.Foreground = Ink("#71697D");
-            connectionState.VerticalAlignment = VerticalAlignment.Center;
-            var guideButton = Button("连接帮助", delegate { connectionGuidePanel.Visibility = connectionGuidePanel.IsVisible ? Visibility.Collapsed : Visibility.Visible; });
-            guideButton.MinHeight = 28;
-            guideButton.Padding = new Thickness(6, 2, 6, 2);
-            guideButton.Background = Brushes.Transparent;
-            guideButton.BorderThickness = new Thickness(0);
-            guideButton.Foreground = Ink("#75558E");
+            connectionHelpButton = Button("连接帮助", delegate { ConnectionHelpClicked(); });
+            connectionHelpButton.MinHeight = 28;
+            connectionHelpButton.Padding = new Thickness(6, 2, 6, 2);
+            connectionHelpButton.Background = Brushes.Transparent;
+            connectionHelpButton.BorderThickness = new Thickness(0);
+            connectionHelpButton.Foreground = Ink("#75558E");
             var connectionActions = new StackPanel { Orientation = Orientation.Horizontal };
-            connectionState.Margin = new Thickness(0, 0, 12, 0);
-            connectionActions.Children.Add(connectionState);
-            manageConnection = Button("管理设备", delegate
-            {
-                connectionDetailsExpanded = !connectionDetailsExpanded;
-                UpdateConnectionControls();
-            });
-            manageConnection.Padding = new Thickness(6, 2, 6, 2);
-            manageConnection.MinHeight = 28;
-            manageConnection.Background = Brushes.Transparent;
-            manageConnection.BorderThickness = new Thickness(0);
-            manageConnection.Foreground = Ink("#75558E");
-            connectionActions.Children.Add(manageConnection);
+            connectionActions.Children.Add(connectionHelpButton);
             musicContent.Children.Add(SectionHeader("设备连接", connectionActions));
-            var deviceGrid = new Grid { MaxWidth = 640, HorizontalAlignment = HorizontalAlignment.Left };
-            deviceGrid.SetBinding(FrameworkElement.WidthProperty, new Binding("ActualWidth") { Source = connectionDetails });
-            deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            deviceGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            connectionDeviceRow = new Grid { MaxWidth = 640, HorizontalAlignment = HorizontalAlignment.Left };
+            connectionDeviceRow.SetBinding(FrameworkElement.WidthProperty, new Binding("ActualWidth") { Source = connectionDetails });
+            connectionDeviceRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            connectionDeviceRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            connectionDeviceRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             StyleField(devices);
             AutomationProperties.SetName(devices, "已配对的 iPhone");
             devices.SetBinding(FrameworkElement.ToolTipProperty, new Binding("SelectedItem.Id") { Source = devices });
@@ -892,34 +913,40 @@ namespace LyricConnector
             deviceText.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
             deviceItem.AppendChild(deviceText);
             devices.ItemTemplate = new DataTemplate(typeof(DeviceChoice)) { VisualTree = deviceItem };
-            devices.SelectionChanged += delegate { UpdateConnectionControls(); };
+            devices.SelectionChanged += delegate
+            {
+                UpdateConnectionControls();
+                if (connectionTourActive && connectionTourStep == TourSelectDevice && devices.SelectedItem != null)
+                {
+                    connectionTourConnectFailed = false;
+                    connectionTourError = "";
+                    SetConnectionTourStep(TourConnectDevice);
+                }
+            };
             devices.Margin = new Thickness(0, 0, 8, 0);
             refreshDevices = Button("刷新", async delegate { await RefreshDevicesAsync(false); });
             connect = Button("连接", async delegate
             {
                 if (activeSource != null || connectionBusy) await DisconnectAsync();
-                else await ConnectAsync();
+                else await ConnectAsync(true);
             });
             refreshDevices.Tag = ControlTheme.Glyph("refresh");
             connect.Tag = ControlTheme.Glyph("connect");
             refreshDevices.MinWidth = connect.MinWidth = 86;
             refreshDevices.Margin = new Thickness(0, 0, 8, 0);
-            deviceGrid.Children.Add(devices);
+            connectionDeviceRow.Children.Add(devices);
             Grid.SetColumn(refreshDevices, 1);
-            deviceGrid.Children.Add(refreshDevices);
+            connectionDeviceRow.Children.Add(refreshDevices);
             Grid.SetColumn(connect, 2);
-            deviceGrid.Children.Add(connect);
-            connectionDetails.Children.Add(deviceGrid);
+            connectionDeviceRow.Children.Add(connect);
+            connectionDetails.Children.Add(connectionDeviceRow);
             var connectionFeedback = new Grid { Margin = new Thickness(0, 6, 0, 0) };
             connectionFeedback.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            connectionFeedback.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             sourceStatus.FontSize = 12;
             sourceStatus.Foreground = Ink("#71697D");
             sourceStatus.VerticalAlignment = VerticalAlignment.Center;
             sourceStatus.Margin = new Thickness(0, 0, 12, 0);
             connectionFeedback.Children.Add(sourceStatus);
-            Grid.SetColumn(guideButton, 1);
-            connectionFeedback.Children.Add(guideButton);
             connectionDetails.Children.Add(connectionFeedback);
             connectionGuidePanel = CreateConnectionGuide();
             connectionDetails.Children.Add(connectionGuidePanel);
@@ -1183,8 +1210,37 @@ namespace LyricConnector
             root.Children.Add(settingsPages);
             var windowSurface = new Border { Background = Background, BorderBrush = Ink("#D9D2E0"),
                 BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Child = root };
-            Content = windowSurface;
-            SizeChanged += delegate { UpdateSettingsLayout(); };
+            spotlightHost = new Grid();
+            spotlightHost.Children.Add(windowSurface);
+            InitializeSpotlightLayer();
+            spotlightHost.Children.Add(spotlightLayer);
+            Content = spotlightHost;
+            SizeChanged += delegate { UpdateSettingsLayout(); ScheduleSpotlightUpdate(); };
+            PreviewKeyDown += delegate(object sender, System.Windows.Input.KeyEventArgs args)
+            {
+                if (args.Key == System.Windows.Input.Key.Escape && connectionTourActive)
+                {
+                    DismissConnectionTour();
+                    args.Handled = true;
+                }
+            };
+            Deactivated += delegate
+            {
+                if (bluetoothSettingsLaunchPending) bluetoothSettingsWindowOpened = true;
+            };
+            Activated += async delegate
+            {
+                if (!bluetoothSettingsWindowOpened) return;
+                bluetoothSettingsWindowOpened = false;
+                bluetoothSettingsLaunchPending = false;
+                if (!connectionTourActive || closing) return;
+                bluetoothSettingsReturned = true;
+                while (refreshingDevices && !closing) await Task.Delay(100);
+                if (!connectionTourActive || closing) return;
+                spotlightLayer.Visibility = Visibility.Visible;
+                ScheduleSpotlightUpdate();
+                await RefreshDevicesAsync(false);
+            };
             SelectSettingsPage(false);
             UpdateOffset();
             UpdateCandidatePlaceholder();
@@ -1214,6 +1270,7 @@ namespace LyricConnector
                 initialized = true;
                 if (settings.ShowLyrics != false) overlay.Show();
                 ticker.Start();
+                MaybeStartConnectionTour();
                 await RefreshDevicesAsync(true);
             };
             Closing += async delegate(object sender, System.ComponentModel.CancelEventArgs args)
@@ -1252,32 +1309,360 @@ namespace LyricConnector
         private Border CreateConnectionGuide()
         {
             var content = new StackPanel();
-            content.Children.Add(new TextBlock { Text = "首次连接 iPhone", FontSize = 14, FontWeight = FontWeights.SemiBold,
+            content.Children.Add(new TextBlock { Text = "连接帮助", FontSize = 14, FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(Color.FromRgb(40, 34, 52)), Margin = new Thickness(0, 0, 0, 8) });
-            content.Children.Add(new TextBlock { Text = "1. 在 iPhone 和电脑上开启蓝牙，并在 Windows 蓝牙设置中配对 iPhone。",
+            openBluetoothSettingsButton = Button("打开 Windows 蓝牙设置", delegate { OpenBluetoothSettings(); });
+            openBluetoothSettingsButton.Tag = ControlTheme.Glyph("bluetooth");
+            openBluetoothSettingsButton.MinWidth = 150;
+            openBluetoothSettingsButton.HorizontalAlignment = HorizontalAlignment.Left;
+            openBluetoothSettingsButton.ToolTip = "与 iPhone 配对后返回此处刷新设备列表";
+            AutomationProperties.SetName(openBluetoothSettingsButton, "打开 Windows 蓝牙设置");
+            content.Children.Add(openBluetoothSettingsButton);
+            connectionGuideDescription = new TextBlock { Text = DefaultConnectionGuideDescription,
                 TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(76, 68, 88)),
-                Margin = new Thickness(0, 0, 0, 6) });
-            content.Children.Add(new TextBlock { Text = "2. 回到这里，点“刷新”，选择 iPhone，再点“连接”。",
-                TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(76, 68, 88)),
-                Margin = new Thickness(0, 0, 0, 6) });
-            content.Children.Add(new TextBlock { Text = "3. 连接成功后，可播放音乐检查歌词读取。连接失败时可刷新设备后重试。",
-                TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(76, 68, 88)),
-                Margin = new Thickness(0, 0, 0, 10) });
-            var actions = new StackPanel { Orientation = Orientation.Horizontal };
-            var openBluetoothSettings = Button("打开 Windows 蓝牙设置", delegate { OpenBluetoothSettings(); });
-            openBluetoothSettings.Margin = new Thickness(0, 0, 8, 0);
-            actions.Children.Add(openBluetoothSettings);
-            actions.Children.Add(Button("稍后连接", delegate { connectionGuidePanel.Visibility = Visibility.Collapsed; }));
-            content.Children.Add(actions);
+                Margin = new Thickness(0, 8, 0, 0) };
+            content.Children.Add(connectionGuideDescription);
+            connectionTourRestartButton = Button("重新开始引导", delegate { StartConnectionTour(TourPairDevice); });
+            connectionTourRestartButton.Margin = new Thickness(0, 8, 0, 0);
+            connectionTourRestartButton.Padding = new Thickness(4, 2, 4, 2);
+            connectionTourRestartButton.Background = Brushes.Transparent;
+            connectionTourRestartButton.BorderThickness = new Thickness(0);
+            connectionTourRestartButton.Foreground = Ink("#75558E");
+            content.Children.Add(connectionTourRestartButton);
             return new Border { BorderBrush = Ink("#D9C9E6"), BorderThickness = new Thickness(2, 0, 0, 0),
                 Padding = new Thickness(12, 0, 0, 0), Margin = new Thickness(0, 10, 0, 0),
                 Visibility = Visibility.Collapsed, Child = content };
         }
 
+        private void InitializeSpotlightLayer()
+        {
+            var scrim = new SolidColorBrush(Color.FromArgb(202, 17, 12, 24));
+            spotlightTop = new Border { Background = scrim };
+            spotlightLeft = new Border { Background = scrim };
+            spotlightRight = new Border { Background = scrim };
+            spotlightBottom = new Border { Background = scrim };
+            spotlightRing = new Border { BorderBrush = Ink("#A77BC2"), BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(6), Background = Brushes.Transparent, IsHitTestVisible = false };
+
+            var content = new StackPanel();
+            var header = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            spotlightProgress = new TextBlock { FontSize = 11, FontWeight = FontWeights.SemiBold,
+                Foreground = Ink("#75558E"), VerticalAlignment = VerticalAlignment.Center };
+            header.Children.Add(spotlightProgress);
+            spotlightSkip = Button("跳过引导", delegate { SkipConnectionTour(); });
+            spotlightSkip.MinHeight = 24;
+            spotlightSkip.Padding = new Thickness(4, 1, 4, 1);
+            spotlightSkip.Background = Brushes.Transparent;
+            spotlightSkip.BorderThickness = new Thickness(0);
+            spotlightSkip.Foreground = Ink("#71697D");
+            spotlightSkip.FontSize = 12;
+            Grid.SetColumn(spotlightSkip, 1);
+            header.Children.Add(spotlightSkip);
+            content.Children.Add(header);
+            spotlightTitle = new TextBlock { FontSize = 16, FontWeight = FontWeights.SemiBold,
+                Foreground = Ink("#272235"), Margin = new Thickness(0, 0, 0, 5) };
+            spotlightDescription = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap,
+                Foreground = Ink("#51475D"), Margin = new Thickness(0, 0, 0, 4) };
+            content.Children.Add(spotlightTitle);
+            content.Children.Add(spotlightDescription);
+
+            var actions = new StackPanel { Orientation = Orientation.Horizontal };
+            spotlightPrevious = Button("上一步", delegate { PreviousConnectionTourStep(); });
+            spotlightPrevious.Margin = new Thickness(0, 4, 8, 0);
+            spotlightPrevious.Visibility = Visibility.Collapsed;
+            spotlightAction = PrimaryButton("已完成", delegate { ConfirmPairingComplete(); });
+            spotlightAction.Margin = new Thickness(0, 4, 0, 0);
+            spotlightAction.Visibility = Visibility.Collapsed;
+            actions.Children.Add(spotlightPrevious);
+            actions.Children.Add(spotlightAction);
+            content.Children.Add(actions);
+            spotlightCallout = new Border { Background = Ink("#FFFEFF"), BorderBrush = Ink("#D9C9E6"),
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(12),
+                MaxWidth = 320, Child = content, IsHitTestVisible = true, Focusable = true };
+
+            spotlightLayer.Children.Add(spotlightTop);
+            spotlightLayer.Children.Add(spotlightLeft);
+            spotlightLayer.Children.Add(spotlightRight);
+            spotlightLayer.Children.Add(spotlightBottom);
+            spotlightLayer.Children.Add(spotlightRing);
+            spotlightLayer.Children.Add(spotlightCallout);
+        }
+
+        private void MaybeStartConnectionTour()
+        {
+            if (activeSource != null || settings.ConnectionTourCompleted || connectionTourDismissedThisRun) return;
+            StartConnectionTour(TourPairDevice);
+        }
+
+        private void StartConnectionTour(int initialStep)
+        {
+            if (closing || (activeSource != null && !connectionBusy)) return;
+            if (connectionTourActive)
+            {
+                spotlightLayer.Visibility = Visibility.Visible;
+                ScheduleSpotlightUpdate();
+                return;
+            }
+            connectionGuideVisibleBeforeTour = connectionGuidePanel.Visibility == Visibility.Visible;
+            connectionGuideDescriptionVisibilityBeforeTour = connectionGuideDescription.Visibility;
+            connectionGuideDescription.Visibility = Visibility.Collapsed;
+            connectionTourActive = true;
+            connectionTourHistory.Clear();
+            connectionTourConnectFailed = false;
+            connectionTourError = "";
+            bluetoothSettingsReturned = false;
+            connectionTourStep = initialStep;
+            ConfigureConnectionTourStep();
+            spotlightLayer.Visibility = Visibility.Visible;
+            ScheduleSpotlightUpdate();
+        }
+
+        private void ConnectionHelpClicked()
+        {
+            if (connectionTourActive)
+                return;
+            connectionGuidePanel.Visibility = connectionGuidePanel.IsVisible
+                ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void SetConnectionTourStep(int step)
+        {
+            if (!connectionTourActive || connectionTourStep == step) return;
+            connectionTourHistory.Push(connectionTourStep);
+            connectionTourStep = step;
+            ConfigureConnectionTourStep();
+            spotlightLayer.Visibility = Visibility.Visible;
+            ScheduleSpotlightUpdate();
+        }
+
+        private void ConfigureConnectionTourStep()
+        {
+            connectionGuidePanel.Visibility = connectionTourStep == TourPairDevice
+                ? Visibility.Visible : Visibility.Collapsed;
+            UpdateConnectionControls();
+            UpdateConnectionTourCopy();
+        }
+
+        private void PreviousConnectionTourStep()
+        {
+            if (!connectionTourActive || connectionTourHistory.Count == 0) return;
+            var previousStep = connectionTourHistory.Pop();
+            if (connectionTourStep == TourConnectDevice && connectionTourConnectFailed
+                && previousStep == TourSelectDevice && devices.SelectedItem != null)
+                devices.SelectedItem = null;
+            connectionTourStep = previousStep;
+            connectionTourConnectFailed = false;
+            ConfigureConnectionTourStep();
+            ScheduleSpotlightUpdate();
+        }
+
+        private void ConfirmPairingComplete()
+        {
+            if (!connectionTourActive || connectionTourStep != TourPairDevice || !bluetoothSettingsReturned
+                || refreshingDevices || devices.Items.Count > 0) return;
+            bluetoothSettingsReturned = false;
+            connectionTourError = "";
+            SetConnectionTourStep(TourSelectDevice);
+        }
+
+        private void AdvanceConnectionTourAfterDeviceRefresh(int deviceCount)
+        {
+            if (!connectionTourActive || connectionTourStep != TourPairDevice || deviceCount == 0) return;
+            bluetoothSettingsReturned = false;
+            connectionTourError = "";
+            SetConnectionTourStep(TourSelectDevice);
+            if (devices.SelectedItem != null) SetConnectionTourStep(TourConnectDevice);
+        }
+
+        private void DismissConnectionTour()
+        {
+            if (!connectionTourActive) return;
+            connectionTourActive = false;
+            connectionTourDismissedThisRun = true;
+            connectionTourHistory.Clear();
+            spotlightLayer.Visibility = Visibility.Collapsed;
+            connectionGuidePanel.Visibility = connectionGuideVisibleBeforeTour ? Visibility.Visible : Visibility.Collapsed;
+            connectionGuideDescription.Visibility = connectionGuideDescriptionVisibilityBeforeTour;
+            UpdateConnectionControls();
+        }
+
+        private void SkipConnectionTour()
+        {
+            if (!connectionTourActive) return;
+            settings.ConnectionTourCompleted = true;
+            SaveSettings();
+            DismissConnectionTour();
+        }
+
+        private FrameworkElement ConnectionTourTarget()
+        {
+            if (connectionTourStep == TourPairDevice) return openBluetoothSettingsButton;
+            if (connectionTourStep == TourSelectDevice) return connectionDeviceRow;
+            if (connectionTourStep == TourConnectDevice) return connect;
+            return null;
+        }
+
+        private void UpdateConnectionTourCopy()
+        {
+            if (!connectionTourActive) return;
+            spotlightAction.Visibility = Visibility.Collapsed;
+            spotlightPrevious.Visibility = Visibility.Collapsed;
+            if (connectionTourStep == TourPairDevice)
+            {
+                spotlightProgress.Text = "步骤 1 / 3";
+                spotlightTitle.Text = "配对 iPhone";
+                if (refreshingDevices)
+                    spotlightDescription.Text = "正在检查已配对设备…";
+                else if (connectionTourError.Length > 0)
+                    spotlightDescription.Text = connectionTourError;
+                else if (bluetoothSettingsReturned && devices.Items.Count == 0)
+                    spotlightDescription.Text = "尚未发现设备。确认已完成配对后可继续刷新设备列表，或重新打开蓝牙设置。";
+                else
+                    spotlightDescription.Text = "打开高亮的 Windows 蓝牙设置，与 iPhone 完成配对。返回后会自动检查设备。";
+                spotlightAction.Visibility = bluetoothSettingsReturned && devices.Items.Count == 0 && !refreshingDevices
+                    ? Visibility.Visible : Visibility.Collapsed;
+                spotlightAction.IsEnabled = spotlightAction.Visibility == Visibility.Visible;
+            }
+            else if (connectionTourStep == TourSelectDevice)
+            {
+                spotlightProgress.Text = "步骤 2 / 3";
+                spotlightTitle.Text = "选择 iPhone";
+                if (refreshingDevices)
+                    spotlightDescription.Text = "正在刷新设备列表…";
+                else if (connectionTourError.Length > 0)
+                    spotlightDescription.Text = connectionTourError + " 选择设备后可重试连接。";
+                else if (devices.Items.Count == 0)
+                    spotlightDescription.Text = "尚未发现设备。点击高亮区域中的“刷新”重新检查，"
+                        + (connectionTourHistory.Count > 0 && connectionTourHistory.Peek() == TourPairDevice
+                            ? "或返回上一步重新配对。" : "或打开“蓝牙设置”完成配对。");
+                else
+                    spotlightDescription.Text = "点击“刷新”更新列表，再从设备列表中选择你的 iPhone。选中后会自动进入连接步骤。";
+                spotlightPrevious.Visibility = devices.Items.Count == 0 && connectionTourHistory.Count > 0
+                    && connectionTourHistory.Peek() == TourPairDevice ? Visibility.Visible : Visibility.Collapsed;
+            }
+            else if (connectionTourStep == TourConnectDevice)
+            {
+                spotlightProgress.Text = "步骤 3 / 3";
+                spotlightTitle.Text = connectionBusy ? "正在连接 iPhone" : "连接 iPhone";
+                spotlightDescription.Text = connectionTourConnectFailed
+                    ? "连接失败：" + connectionTourError + " 请点击高亮的“连接”重试。"
+                    : connectionBusy ? "正在尝试连接，请稍候。连接成功后引导会自动关闭。"
+                    : "点击页面上的“连接”按钮。连接成功后引导会自动关闭。";
+                spotlightPrevious.Visibility = connectionTourConnectFailed && connectionTourHistory.Count > 0
+                    && connectionTourHistory.Peek() == TourSelectDevice ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        private void ScheduleSpotlightUpdate()
+        {
+            if (!connectionTourActive || spotlightLayer.Visibility != Visibility.Visible || spotlightHost == null) return;
+            Dispatcher.BeginInvoke(new Action(UpdateSpotlight), DispatcherPriority.Loaded);
+        }
+
+        private void UpdateSpotlight()
+        {
+            if (!connectionTourActive || spotlightLayer.Visibility != Visibility.Visible || spotlightHost == null) return;
+            var target = ConnectionTourTarget();
+            var hostWidth = spotlightHost.ActualWidth;
+            var hostHeight = spotlightHost.ActualHeight;
+            if (target == null || !target.IsVisible || target.RenderSize.Width <= 0 || hostWidth <= 0 || hostHeight <= 0) return;
+
+            try
+            {
+                var visibleBounds = target.TransformToAncestor(musicPage).TransformBounds(new Rect(target.RenderSize));
+                if (visibleBounds.Top < 0 || visibleBounds.Bottom > musicPage.ViewportHeight)
+                {
+                    target.BringIntoView();
+                    Dispatcher.BeginInvoke(new Action(UpdateSpotlight), DispatcherPriority.Render);
+                    return;
+                }
+            }
+            catch (InvalidOperationException) { }
+
+            Rect bounds;
+            try { bounds = target.TransformToAncestor(spotlightHost).TransformBounds(new Rect(target.RenderSize)); }
+            catch (InvalidOperationException) { return; }
+            bounds.Inflate(6, 6);
+            bounds.Intersect(new Rect(0, 0, hostWidth, hostHeight));
+            if (bounds.IsEmpty || bounds.Width <= 0 || bounds.Height <= 0) return;
+
+            SetSpotlightShade(spotlightTop, 0, 0, hostWidth, bounds.Top);
+            SetSpotlightShade(spotlightLeft, 0, bounds.Top, bounds.Left, bounds.Height);
+            SetSpotlightShade(spotlightRight, bounds.Right, bounds.Top, hostWidth - bounds.Right, bounds.Height);
+            SetSpotlightShade(spotlightBottom, 0, bounds.Bottom, hostWidth, hostHeight - bounds.Bottom);
+            Canvas.SetLeft(spotlightRing, bounds.Left);
+            Canvas.SetTop(spotlightRing, bounds.Top);
+            spotlightRing.Width = bounds.Width;
+            spotlightRing.Height = bounds.Height;
+
+            spotlightCallout.Width = Math.Max(1, Math.Min(320, hostWidth - 16));
+            spotlightCallout.Measure(new Size(spotlightCallout.Width, hostHeight));
+            var calloutWidth = spotlightCallout.DesiredSize.Width;
+            var calloutHeight = spotlightCallout.DesiredSize.Height;
+            var horizontalInset = Math.Min(8, Math.Max(0, (hostWidth - calloutWidth) / 2));
+            var verticalInset = Math.Min(8, Math.Max(0, (hostHeight - calloutHeight) / 2));
+            var maxLeft = Math.Max(horizontalInset, hostWidth - calloutWidth - horizontalInset);
+            var maxTop = Math.Max(verticalInset, hostHeight - calloutHeight - verticalInset);
+            var centeredLeft = bounds.Left + (bounds.Width - calloutWidth) / 2;
+            var left = Math.Max(horizontalInset, Math.Min(maxLeft, centeredLeft));
+            const double gap = 10;
+            var below = bounds.Bottom + gap;
+            var above = bounds.Top - calloutHeight - gap;
+            double top;
+            if (below + calloutHeight <= hostHeight - verticalInset) top = below;
+            else if (above >= verticalInset) top = above;
+            else if (hostWidth - bounds.Right >= calloutWidth + gap + horizontalInset)
+            {
+                left = bounds.Right + gap;
+                top = Math.Max(verticalInset, Math.Min(maxTop, bounds.Top));
+            }
+            else if (bounds.Left >= calloutWidth + gap + horizontalInset)
+            {
+                left = bounds.Left - calloutWidth - gap;
+                top = Math.Max(verticalInset, Math.Min(maxTop, bounds.Top));
+            }
+            else if (hostHeight - bounds.Bottom >= bounds.Top)
+                top = Math.Max(verticalInset, Math.Min(maxTop, below));
+            else
+                top = Math.Max(verticalInset, Math.Min(maxTop, above));
+            Canvas.SetLeft(spotlightCallout, left);
+            Canvas.SetTop(spotlightCallout, top);
+        }
+
+        private static void SetSpotlightShade(Border shade, double left, double top, double width, double height)
+        {
+            shade.Width = Math.Max(0, width);
+            shade.Height = Math.Max(0, height);
+            Canvas.SetLeft(shade, left);
+            Canvas.SetTop(shade, top);
+            shade.Visibility = width > 0 && height > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private void OpenBluetoothSettings()
         {
-            try { Process.Start(new ProcessStartInfo("ms-settings:bluetooth") { UseShellExecute = true }); }
-            catch (Exception error) { sourceStatus.Text = "无法打开 Windows 蓝牙设置：" + error.Message; }
+            try
+            {
+                if (connectionTourActive)
+                {
+                    bluetoothSettingsLaunchPending = true;
+                    bluetoothSettingsWindowOpened = false;
+                    bluetoothSettingsReturned = false;
+                    connectionTourError = "";
+                    spotlightLayer.Visibility = Visibility.Collapsed;
+                }
+                Process.Start(new ProcessStartInfo("ms-settings:bluetooth") { UseShellExecute = true });
+            }
+            catch (Exception error)
+            {
+                bluetoothSettingsLaunchPending = false;
+                bluetoothSettingsWindowOpened = false;
+                if (connectionTourActive) spotlightLayer.Visibility = Visibility.Visible;
+                connectionTourError = "无法打开 Windows 蓝牙设置：" + error.Message;
+                sourceStatus.Text = connectionTourError;
+                ScheduleSpotlightUpdate();
+            }
         }
 
         private void SaveSettings()
@@ -1294,6 +1679,12 @@ namespace LyricConnector
             if (closing) return;
             if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
             if (!IsVisible) Show();
+            MaybeStartConnectionTour();
+            if (connectionTourActive && !bluetoothSettingsWindowOpened)
+            {
+                spotlightLayer.Visibility = Visibility.Visible;
+                ScheduleSpotlightUpdate();
+            }
             Activate();
         }
 
@@ -1791,7 +2182,9 @@ namespace LyricConnector
             if (connectionBusy)
                 connect.Content = activeSource != null ? "取消连接" : manuallyDisconnected ? "断开中…" : "连接中…";
             else connect.Content = activeSource != null ? "断开" : "连接";
-            connect.IsEnabled = !refreshingDevices && (activeSource != null || (!connectionBusy && devices.SelectedItem != null));
+            connect.IsEnabled = !refreshingDevices
+                && ((!connectionTourActive || !connectionBusy) && activeSource != null
+                    || (!connectionBusy && devices.SelectedItem != null));
             var connected = activeSource != null && !connectionBusy;
             playbackConnectionStatus.Text = connected ? "已连接" : connectionBusy ? "处理中" : reconnectTimer.IsEnabled ? "等待重连" : "未连接";
             playbackConnectionStatus.Foreground = connected ? Ink("#E7DDED") : Ink("#C6B7D4");
@@ -1801,16 +2194,16 @@ namespace LyricConnector
             playbackConnectionBadge.BorderThickness = new Thickness(0);
             playbackConnectionBadge.ToolTip = "手机蓝牙连接：" + playbackConnectionStatus.Text;
             AutomationProperties.SetName(playbackConnectionBadge, playbackConnectionBadge.ToolTip.ToString());
-            connectionState.Text = connected ? "● 已连接" + (model.Player.Length > 0 ? " · " + DisplayPlayerName(model.Player) : "")
-                : connectionBusy ? "处理中" : reconnectTimer.IsEnabled ? "等待重连" : "未连接";
-            connectionDetails.Visibility = settings.HasConnectedToPhone && !connectionDetailsExpanded
-                ? Visibility.Collapsed : Visibility.Visible;
-            manageConnection.Visibility = settings.HasConnectedToPhone ? Visibility.Visible : Visibility.Collapsed;
-            manageConnection.Content = connectionDetailsExpanded ? "收起" : "管理设备";
-            AutomationProperties.SetName(manageConnection, manageConnection.Content.ToString());
+            connectionDetails.Visibility = Visibility.Visible;
             sourceStatus.Visibility = model.Ready ? Visibility.Collapsed : Visibility.Visible;
-            connectionState.Foreground = activeSource != null && !connectionBusy ? Ink("#287342") : Ink("#71697D");
+            connectionTourRestartButton.Visibility = connectionTourActive || activeSource != null && !connectionBusy
+                ? Visibility.Collapsed : Visibility.Visible;
             AutomationProperties.SetName(connect, connect.Content.ToString());
+            if (connectionTourActive)
+            {
+                UpdateConnectionTourCopy();
+                ScheduleSpotlightUpdate();
+            }
         }
 
         private void UpdateLyricActions()
@@ -1833,6 +2226,7 @@ namespace LyricConnector
         {
             if (refreshingDevices) return;
             refreshingDevices = true;
+            if (connectionTourActive && connectionTourStep != TourConnectDevice) connectionTourError = "";
             var generation = connectionGeneration;
             UpdateConnectionControls();
             sourceStatus.Text = "正在读取已配对设备…";
@@ -1846,9 +2240,10 @@ namespace LyricConnector
                 devices.SelectedItem = target;
                 sourceStatus.Text = activeSource != null ? model.Status : found.Count == 0
                     ? "未发现已配对设备，请先在 Windows 蓝牙设置中配对 iPhone。" : "选择 iPhone 后连接。";
+                if (!autoConnect) AdvanceConnectionTourAfterDeviceRefresh(found.Count);
                 if (autoConnect)
                 {
-                    if (target != null) await ConnectAsync();
+                    if (target != null) await ConnectAsync(false);
                     else StartAutoReconnect();
                 }
             }
@@ -1856,6 +2251,7 @@ namespace LyricConnector
             {
                 if (closing || generation != connectionGeneration) return;
                 sourceStatus.Text = "设备读取失败：" + error.Message;
+                if (connectionTourActive) connectionTourError = sourceStatus.Text;
                 if (autoConnect) StartAutoReconnect();
             }
             finally { refreshingDevices = false; UpdateConnectionControls(); }
@@ -1863,20 +2259,23 @@ namespace LyricConnector
 
         private void StartAutoReconnect()
         {
-            if (closing || manuallyDisconnected || (String.IsNullOrEmpty(settings.DeviceId) && requestedDevice.Length == 0)) return;
+            if (closing || manuallyDisconnected || staleBluetoothPairingRepairRequired
+                || (String.IsNullOrEmpty(settings.DeviceId) && requestedDevice.Length == 0)) return;
             if (!reconnectTimer.IsEnabled) reconnectTimer.Start();
             UpdateConnectionControls();
         }
 
         private async Task TryAutoReconnectAsync()
         {
-            if (closing || manuallyDisconnected || activeSource != null || connectionBusy || refreshingDevices || reconnectAttemptInProgress) return;
+            if (closing || manuallyDisconnected || staleBluetoothPairingRepairRequired || activeSource != null
+                || connectionBusy || refreshingDevices || reconnectAttemptInProgress) return;
             reconnectAttemptInProgress = true;
             var generation = connectionGeneration;
             try
             {
                 var found = await AmsSource.DevicesAsync(CancellationToken.None);
-                if (closing || manuallyDisconnected || activeSource != null || generation != connectionGeneration) return;
+                if (closing || manuallyDisconnected || staleBluetoothPairingRepairRequired
+                    || activeSource != null || generation != connectionGeneration) return;
                 var target = found.FirstOrDefault(item => item.Id == settings.DeviceId);
                 if (target == null && requestedDevice.Length > 0) target = found.SingleOrDefault(item => item.Name == requestedDevice);
                 if (target == null)
@@ -1887,7 +2286,7 @@ namespace LyricConnector
                 devices.ItemsSource = found;
                 devices.SelectedItem = target;
                 sourceStatus.Text = "已检测到 iPhone，正在自动重连…";
-                await ConnectAsync();
+                await ConnectAsync(false);
             }
             catch (Exception error)
             {
@@ -1900,12 +2299,22 @@ namespace LyricConnector
             finally { reconnectAttemptInProgress = false; UpdateConnectionControls(); }
         }
 
-        private async Task ConnectAsync()
+        private async Task ConnectAsync(bool userInitiated)
         {
             if (connectionBusy || activeSource != null) return;
             var device = devices.SelectedItem as DeviceChoice;
             if (device == null) { sourceStatus.Text = "请先选择你的 iPhone。"; return; }
+            if (staleBluetoothPairingRepairRequired && !userInitiated) return;
             manuallyDisconnected = false;
+            if (userInitiated && staleBluetoothPairingRepairRequired)
+            {
+                staleBluetoothPairingFailureCount = 0;
+                staleBluetoothPairingRepairRequired = false;
+            }
+            if (connectionTourActive && connectionTourStep != TourConnectDevice)
+                SetConnectionTourStep(TourConnectDevice);
+            connectionTourConnectFailed = false;
+            connectionTourError = "";
             connectionBusy = true;
             reconnectTimer.Stop();
             var generation = ++connectionGeneration;
@@ -1940,16 +2349,53 @@ namespace LyricConnector
             finally { connectionBusy = false; UpdateConnectionControls(); }
         }
 
+        private static bool IsStaleBluetoothPairingFailure(string message)
+        {
+            return !String.IsNullOrEmpty(message)
+                && (message.IndexOf("Unreachable", StringComparison.OrdinalIgnoreCase) >= 0
+                    || message.IndexOf("超时", StringComparison.Ordinal) >= 0);
+        }
+
+        private void ShowStaleBluetoothPairingHelp()
+        {
+            staleBluetoothPairingRepairRequired = true;
+            reconnectTimer.Stop();
+            connectionGuideDescription.Text = StaleBluetoothPairingInstructions;
+            sourceStatus.Text = "多次无法读取 iPhone 蓝牙状态。建议忽略旧配对并重新配对。";
+            if (!connectionTourActive)
+            {
+                connectionGuidePanel.Visibility = Visibility.Visible;
+                return;
+            }
+
+            connectionTourHistory.Clear();
+            connectionTourStep = TourPairDevice;
+            connectionTourConnectFailed = false;
+            connectionTourError = StaleBluetoothPairingInstructions;
+            bluetoothSettingsReturned = false;
+            ConfigureConnectionTourStep();
+            spotlightLayer.Visibility = Visibility.Visible;
+            ScheduleSpotlightUpdate();
+        }
+
         private void Accept(SourceUpdate update)
         {
             if (update.Revision < model.Revision) return;
             if (update.Kind == UpdateKind.Disconnected)
+                staleBluetoothPairingFailureCount = !manuallyDisconnected && IsStaleBluetoothPairingFailure(update.Message)
+                    ? staleBluetoothPairingFailureCount + 1 : 0;
+            if (update.Kind == UpdateKind.Disconnected)
             {
                 activeSource = null;
                 connectionBusy = false;
-                if (!manuallyDisconnected)
+                if (connectionTourActive)
                 {
-                    connectionDetailsExpanded = true;
+                    var nextStep = devices.SelectedItem != null ? TourConnectDevice
+                        : devices.Items.Count > 0 ? TourSelectDevice : TourPairDevice;
+                    SetConnectionTourStep(nextStep);
+                }
+                else if (!manuallyDisconnected)
+                {
                     connectionGuidePanel.Visibility = Visibility.Visible;
                 }
             }
@@ -1957,17 +2403,32 @@ namespace LyricConnector
             if (update.Kind == UpdateKind.Connected)
             {
                 connectionBusy = false;
-                connectionDetailsExpanded = false;
-                connectionGuidePanel.Visibility = Visibility.Collapsed;
-                if (!settings.HasConnectedToPhone)
+                settings.ConnectionTourCompleted = true;
+                SaveSettings();
+                if (connectionTourActive) DismissConnectionTour();
+                else
                 {
-                    settings.HasConnectedToPhone = true;
-                    SaveSettings();
+                    connectionGuidePanel.Visibility = Visibility.Collapsed;
                 }
             }
             sourceStatus.Text = model.Status + (model.Player.Length > 0 ? " · " + DisplayPlayerName(model.Player) : "");
+            if (update.Kind == UpdateKind.Disconnected && connectionTourActive
+                && connectionTourStep == TourConnectDevice && !manuallyDisconnected)
+            {
+                connectionTourConnectFailed = true;
+                connectionTourError = String.IsNullOrWhiteSpace(update.Message) ? sourceStatus.Text : update.Message;
+            }
+            if (update.Kind == UpdateKind.Disconnected
+                && staleBluetoothPairingFailureCount >= StaleBluetoothPairingFailureThreshold)
+                ShowStaleBluetoothPairingHelp();
             if (update.Kind == UpdateKind.Disconnected) StartAutoReconnect();
-            else if (update.Kind == UpdateKind.Snapshot) reconnectTimer.Stop();
+            else if (update.Kind == UpdateKind.Snapshot)
+            {
+                staleBluetoothPairingFailureCount = 0;
+                staleBluetoothPairingRepairRequired = false;
+                connectionGuideDescription.Text = DefaultConnectionGuideDescription;
+                reconnectTimer.Stop();
+            }
             Console.WriteLine("AMS: " + update.Kind + " r" + update.Revision + " " + model.Status);
             if (changed || update.Kind == UpdateKind.Transition || update.Kind == UpdateKind.Disconnected)
             {

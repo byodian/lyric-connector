@@ -30,7 +30,11 @@
 | --- | --- |
 | ![鼠标穿透关闭，鼠标停留在悬浮窗上时显示操作控件与半透明背景](docs/desktop-hover-mouse-through-off.png) | ![鼠标穿透开启，鼠标停留在同一悬浮窗区域时控件隐藏且背景透明](docs/desktop-hover-mouse-through-on.png) |
 
-桌面控制窗口的音乐与歌词页，以及悬浮窗口设置页：
+首次启动时，聚光灯引导会高亮下一项真实操作，并根据配对、设备发现、选择和连接状态推进：
+
+![首次连接引导高亮 Windows 蓝牙设置按钮](docs/desktop-connection-tour.png)
+
+音乐与歌词页会持续显示 iPhone 设备选择和连接操作，并同时展示播放状态与歌词匹配：
 
 ![音乐与歌词页，包含 iPhone 连接、当前状态和歌词匹配](docs/desktop-control.png)
 
