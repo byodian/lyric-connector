@@ -618,6 +618,8 @@ namespace LyricConnector
         private readonly TextBlock offsetLabel = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 76, TextAlignment = TextAlignment.Center };
         private CancellationTokenSource sourceCancellation;
         private Task sourceTask = Task.FromResult(0);
+        internal Func<CancellationToken, Task<List<DeviceChoice>>> ListDevices = AmsSource.DevicesAsync;
+        internal Func<AmsSource, CancellationToken, Task> RunSource = (source, cancellation) => source.RunAsync(cancellation);
         private bool reconnectAttemptInProgress;
         private bool manuallyDisconnected;
         private bool connectionBusy;
@@ -2223,6 +2225,22 @@ namespace LyricConnector
             importLyrics.IsEnabled = model.Ready;
         }
 
+        private DeviceChoice FindCurrentDevice(List<DeviceChoice> found, DeviceChoice previous)
+        {
+            var id = previous != null ? previous.Id : settings.DeviceId;
+            var target = found.FirstOrDefault(item => item.Id == id);
+            if (target != null) return target;
+            var name = previous != null ? previous.Name : requestedDevice;
+            var named = found.Where(item => String.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+            if (named.Count == 1) return named[0];
+            if (previous != null || !String.IsNullOrEmpty(settings.DeviceId))
+            {
+                var phones = found.Where(item => item.Name.StartsWith("iPhone", StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+                if (phones.Count == 1) return phones[0];
+            }
+            return null;
+        }
+
         private async Task RefreshDevicesAsync(bool autoConnect)
         {
             if (refreshingDevices) return;
@@ -2233,11 +2251,10 @@ namespace LyricConnector
             sourceStatus.Text = "正在读取已配对设备…";
             try
             {
-                var found = await AmsSource.DevicesAsync(CancellationToken.None);
+                var found = await ListDevices(CancellationToken.None);
                 if (closing || generation != connectionGeneration) return;
                 devices.ItemsSource = found;
-                var target = found.FirstOrDefault(item => item.Id == settings.DeviceId);
-                if (target == null && requestedDevice.Length > 0) target = found.SingleOrDefault(item => item.Name == requestedDevice);
+                var target = FindCurrentDevice(found, null);
                 devices.SelectedItem = target;
                 sourceStatus.Text = activeSource != null ? model.Status : found.Count == 0
                     ? "未发现已配对设备，请先在 Windows 蓝牙设置中配对 iPhone。" : "选择 iPhone 后连接。";
@@ -2260,25 +2277,22 @@ namespace LyricConnector
 
         private void StartAutoReconnect()
         {
-            if (closing || manuallyDisconnected || staleBluetoothPairingRepairRequired
-                || (String.IsNullOrEmpty(settings.DeviceId) && requestedDevice.Length == 0)) return;
+            if (closing || manuallyDisconnected || (String.IsNullOrEmpty(settings.DeviceId) && requestedDevice.Length == 0)) return;
             if (!reconnectTimer.IsEnabled) reconnectTimer.Start();
             UpdateConnectionControls();
         }
 
         private async Task TryAutoReconnectAsync()
         {
-            if (closing || manuallyDisconnected || staleBluetoothPairingRepairRequired || activeSource != null
+            if (closing || manuallyDisconnected || activeSource != null
                 || connectionBusy || refreshingDevices || reconnectAttemptInProgress) return;
             reconnectAttemptInProgress = true;
             var generation = connectionGeneration;
             try
             {
-                var found = await AmsSource.DevicesAsync(CancellationToken.None);
-                if (closing || manuallyDisconnected || staleBluetoothPairingRepairRequired
-                    || activeSource != null || generation != connectionGeneration) return;
-                var target = found.FirstOrDefault(item => item.Id == settings.DeviceId);
-                if (target == null && requestedDevice.Length > 0) target = found.SingleOrDefault(item => item.Name == requestedDevice);
+                var found = await ListDevices(CancellationToken.None);
+                if (closing || manuallyDisconnected || activeSource != null || generation != connectionGeneration) return;
+                var target = FindCurrentDevice(found, null);
                 if (target == null)
                 {
                     sourceStatus.Text = "等待 iPhone 蓝牙可用，将继续自动重连。";
@@ -2303,9 +2317,8 @@ namespace LyricConnector
         private async Task ConnectAsync(bool userInitiated)
         {
             if (connectionBusy || activeSource != null) return;
-            var device = devices.SelectedItem as DeviceChoice;
-            if (device == null) { sourceStatus.Text = "请先选择你的 iPhone。"; return; }
-            if (staleBluetoothPairingRepairRequired && !userInitiated) return;
+            var previous = devices.SelectedItem as DeviceChoice;
+            if (previous == null) { sourceStatus.Text = "请先选择你的 iPhone。"; return; }
             manuallyDisconnected = false;
             if (userInitiated && staleBluetoothPairingRepairRequired)
             {
@@ -2321,19 +2334,41 @@ namespace LyricConnector
             var generation = ++connectionGeneration;
             UpdateConnectionControls();
             UpdatePlaybackControls();
-            if (sourceCancellation != null) sourceCancellation.Cancel();
-            await sourceTask;
-            if (generation != connectionGeneration || closing) return;
-            sourceCancellation = new CancellationTokenSource();
-            settings.DeviceId = device.Id;
-            Accept(new SourceUpdate { Kind = UpdateKind.Transition, Revision = model.Revision + 1, Message = "正在连接 " + device.Name + "…" });
-            var source = new AmsSource(device, update => Dispatcher.BeginInvoke(new Action(delegate
+            try
             {
-                if (!closing && generation == connectionGeneration) Accept(update);
-            })), model.Revision);
-            activeSource = source;
-            sourceTask = source.RunAsync(sourceCancellation.Token);
-            UpdateConnectionControls();
+                if (sourceCancellation != null) sourceCancellation.Cancel();
+                await sourceTask;
+                if (generation != connectionGeneration || closing) return;
+                var found = await ListDevices(CancellationToken.None);
+                if (generation != connectionGeneration || closing) return;
+                var device = FindCurrentDevice(found, previous);
+                devices.ItemsSource = found;
+                devices.SelectedItem = device;
+                if (device == null) throw new InvalidOperationException("未找到之前连接的 iPhone，请刷新设备列表后选择。");
+                sourceCancellation = new CancellationTokenSource();
+                settings.DeviceId = device.Id;
+                Accept(new SourceUpdate { Kind = UpdateKind.Transition, Revision = model.Revision + 1, Message = "正在连接 " + device.Name + "…" });
+                var source = new AmsSource(device, update => Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    if (!closing && generation == connectionGeneration) Accept(update);
+                })), model.Revision);
+                activeSource = source;
+                sourceTask = RunSource(source, sourceCancellation.Token);
+            }
+            catch (Exception error)
+            {
+                if (generation == connectionGeneration && !closing)
+                {
+                    sourceStatus.Text = "设备读取失败：" + error.Message;
+                    if (connectionTourActive) connectionTourError = sourceStatus.Text;
+                    StartAutoReconnect();
+                }
+            }
+            finally
+            {
+                if (generation == connectionGeneration && !closing && activeSource == null) connectionBusy = false;
+                UpdateConnectionControls();
+            }
         }
 
         private async Task DisconnectAsync()
@@ -2360,7 +2395,6 @@ namespace LyricConnector
         private void ShowStaleBluetoothPairingHelp()
         {
             staleBluetoothPairingRepairRequired = true;
-            reconnectTimer.Stop();
             connectionGuideDescription.Text = StaleBluetoothPairingInstructions;
             sourceStatus.Text = "多次无法读取 iPhone 蓝牙状态。建议忽略旧配对并重新配对。";
             if (!connectionTourActive)
@@ -2419,7 +2453,7 @@ namespace LyricConnector
                 connectionTourConnectFailed = true;
                 connectionTourError = String.IsNullOrWhiteSpace(update.Message) ? sourceStatus.Text : update.Message;
             }
-            if (update.Kind == UpdateKind.Disconnected
+            if (update.Kind == UpdateKind.Disconnected && !staleBluetoothPairingRepairRequired
                 && staleBluetoothPairingFailureCount >= StaleBluetoothPairingFailureThreshold)
                 ShowStaleBluetoothPairingHelp();
             if (update.Kind == UpdateKind.Disconnected) StartAutoReconnect();

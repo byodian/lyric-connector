@@ -200,6 +200,8 @@ namespace LyricConnector
                 try
                 {
                     Check(!Field<bool>(window, "refreshingDevices"), "device discovery completes without connecting a fixture device");
+                    Check(Math.Abs(window.Width - window.MinWidth) < 0.1 && Math.Abs(window.ActualWidth - window.MinWidth) < 1,
+                        "control window opens at its minimum width");
                     var settings = Field<DesktopSettings>(window, "settings");
                     var model = Field<PlaybackModel>(window, "model");
                     var reconnect = Field<DispatcherTimer>(window, "reconnectTimer");
@@ -213,8 +215,34 @@ namespace LyricConnector
                     Invoke(window, "Accept", new SourceUpdate { Kind = UpdateKind.Disconnected, Revision = model.Revision + 1, Message = "测试意外断开" });
                     Check(reconnect.IsEnabled, "unexpected disconnect still schedules automatic reconnect");
                     Check(Field<TextBlock>(window, "sourceStatus").Text == "测试意外断开", "automatic reconnect preserves the connection error");
+                    for (var attempt = 0; attempt < 3; attempt++)
+                        Invoke(window, "Accept", new SourceUpdate { Kind = UpdateKind.Disconnected, Revision = model.Revision + 1,
+                            Message = "无法读取 iPhone 媒体服务（Unreachable）" });
+                    Check(reconnect.IsEnabled, "unreachable media service continues automatic retry after repeated failures");
                     reconnect.Stop();
                     var devices = Field<ComboBox>(window, "devices");
+                    devices.ItemsSource = new[] { fixtureDevice };
+                    devices.SelectedIndex = 0;
+                    var refreshedDevice = new DeviceChoice { Id = "ui-refreshed-device", Name = "iPhone" };
+                    window.ListDevices = cancellation => Task.FromResult(new List<DeviceChoice> { refreshedDevice });
+                    window.RunSource = (session, cancellation) => Task.FromResult(0);
+                    await (Task)Invoke(window, "ConnectAsync", true);
+                    Check(settings.DeviceId == refreshedDevice.Id && ((DeviceChoice)devices.SelectedItem).Id == refreshedDevice.Id,
+                        "manual reconnect replaces a stale Bluetooth device ID with the newly enumerated ID");
+                    await (Task)Invoke(window, "DisconnectAsync");
+                    settings.DeviceId = fixtureDevice.Id;
+                    devices.ItemsSource = new[] { fixtureDevice };
+                    devices.SelectedIndex = 0;
+                    window.GetType().GetField("manuallyDisconnected", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, false);
+                    Invoke(window, "Accept", new SourceUpdate { Kind = UpdateKind.Disconnected, Revision = model.Revision + 1,
+                        Message = "无法读取 iPhone 媒体服务（Unreachable）" });
+                    await (Task)Invoke(window, "TryAutoReconnectAsync");
+                    Check(settings.DeviceId == refreshedDevice.Id && ((DeviceChoice)devices.SelectedItem).Id == refreshedDevice.Id,
+                        "automatic reconnect rediscovers the phone after its Bluetooth ID and display name change");
+                    await (Task)Invoke(window, "DisconnectAsync");
+                    window.ListDevices = AmsSource.DevicesAsync;
+                    window.RunSource = (session, cancellation) => session.RunAsync(cancellation);
+                    settings.DeviceId = fixtureDevice.Id;
                     devices.ItemsSource = new[] { fixtureDevice };
                     devices.SelectedIndex = 0;
                     Check(devices.ToolTip as string == fixtureDevice.Id && ToolTipService.GetShowOnDisabled(devices),

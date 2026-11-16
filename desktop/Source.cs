@@ -422,9 +422,35 @@ namespace LyricConnector
             }
         }
 
+        private static async Task<GattSession> WaitForGattConnectionAsync(BluetoothLEDevice device, CancellationToken cancellation)
+        {
+            var session = await WinRt.Await<GattSession>(GattSession.FromDeviceIdAsync(device.BluetoothDeviceId), cancellation).ConfigureAwait(false);
+            if (session == null) throw new InvalidOperationException("无法建立 iPhone 蓝牙媒体会话。");
+            try
+            {
+                if (!session.CanMaintainConnection) return session;
+                session.MaintainConnection = true;
+                var deadline = Stopwatch.GetTimestamp() + 20L * Stopwatch.Frequency;
+                while (session.SessionStatus != GattSessionStatus.Active)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (Stopwatch.GetTimestamp() >= deadline)
+                        throw new TimeoutException("iPhone 蓝牙媒体服务暂时不可访问，稍后将自动重试。");
+                    await Task.Delay(250, cancellation).ConfigureAwait(false);
+                }
+                return session;
+            }
+            catch
+            {
+                session.Dispose();
+                throw;
+            }
+        }
+
         public async Task RunAsync(CancellationToken cancellation)
         {
             BluetoothLEDevice device = null;
+            GattSession gattSession = null;
             GattDeviceService service = null;
             IDisposable values = null;
             IDisposable remoteValues = null;
@@ -443,6 +469,15 @@ namespace LyricConnector
                 catch (TimeoutException error)
                 {
                     throw new TimeoutException("读取 iPhone 媒体服务超时。请在 Windows 蓝牙设置中重新连接 iPhone。", error);
+                }
+                if (services.Status == GattCommunicationStatus.Unreachable)
+                {
+                    Console.WriteLine("AMS: GATT service unreachable; waiting for the BLE session to reconnect");
+                    if (services.Services != null)
+                        foreach (var item in services.Services) item.Dispose();
+                    gattSession = await WaitForGattConnectionAsync(device, cancellation).ConfigureAwait(false);
+                    services = await WinRt.Await<GattDeviceServicesResult>(
+                        device.GetGattServicesForUuidAsync(serviceId, BluetoothCacheMode.Uncached), cancellation, 45).ConfigureAwait(false);
                 }
                 var discovered = services.Services;
                 if (services.Status != GattCommunicationStatus.Success || discovered == null || discovered.Count != 1)
@@ -614,6 +649,7 @@ namespace LyricConnector
                 if (values != null) values.Dispose();
                 if (connection != null) connection.Dispose();
                 if (service != null) service.Dispose();
+                if (gattSession != null) gattSession.Dispose();
                 if (device != null) device.Dispose();
                 RemoteCommandRequest request;
                 while (remoteCommands.TryDequeue(out request))
